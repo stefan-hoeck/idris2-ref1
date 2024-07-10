@@ -7,4 +7,6 @@ sourcedir  = "src"
 depends    = base         >= 0.7.0
            , linear
 
-modules = Data.Linear.Token
+modules = Data.Linear.Ref1
+        , Data.Linear.Token
+        , Data.Linear.Traverse1
