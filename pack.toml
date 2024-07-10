@@ -1,0 +1,4 @@
+[custom.all.ref1]
+type   = "local"
+path   = "."
+ipkg   = "ref1.ipkg"

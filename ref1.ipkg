@@ -1,0 +1,10 @@
+package ref1
+
+authors    = "stefan-hoeck"
+brief      = "Linear mutable references and utilities"
+version    = 0.7.0
+sourcedir  = "src"
+depends    = base         >= 0.7.0
+           , linear
+
+modules = Data.Linear.Token
