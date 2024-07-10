@@ -35,4 +35,3 @@ replicate1 n f = go [<] n
     go : SnocList a -> Nat -> F1 s (List a)
     go sx 0     t = (sx <>> []) # t
     go sx (S k) t = let v # t2 := f t in go (sx :< v) k t2
-

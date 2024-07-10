@@ -3,6 +3,7 @@ module Data.Linear.Traverse1
 import Data.List1
 import Data.SnocList
 import Data.Vect
+import Data.Linear.Ref1
 import public Data.Linear.Token
 
 %default total
@@ -212,3 +213,15 @@ Traversable1 List1 where
     let w  # t1 := f x t
         wx # t2 := traverse1 f xs t1
      in (w ::: wx) # t2
+
+--------------------------------------------------------------------------------
+-- Utilities
+--------------------------------------------------------------------------------
+
+pairIx : Ref1 () s Nat => a -> F1 s (Nat,a)
+pairIx v t = mapR1 (,v) (readAndMod1 S t)
+
+||| Pairs each value in a data structure with its index of appearance.
+export %inline
+zipWithIndex : Traversable1 f => f a -> f (Nat,a)
+zipWithIndex as = withRef1 Z (traverse1 pairIx as)
