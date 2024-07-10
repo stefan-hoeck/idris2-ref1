@@ -28,6 +28,8 @@ export
 data T1 : (s : Type) -> Type where
   T : T1 s
 
+%name T1 t,t1,t2,t3
+
 ||| Drop a linear token. All associated mutable references and arrays
 ||| will no longer be accessible.
 export %inline
