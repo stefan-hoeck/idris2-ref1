@@ -1,0 +1,8 @@
+package ref1-docs
+
+authors    = "stefan-hoeck"
+version    = 0.7.0
+sourcedir  = "src"
+depends    = ref1
+
+modules = README
