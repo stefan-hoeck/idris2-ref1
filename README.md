@@ -49,7 +49,7 @@ In the example above, we compute the same expression `square 2`
 twice, which might be a waste of time if `square` were a long
 running computation. Since `square` is referentially transparent -
 the same argument will always lead to the same result - we (or the
-compiler!) can implement `eight` in a more efficient way
+compiler!) can rewrite `eight` in a more efficient way
 by storing the result of evaluating `square 2` in a variable:
 
 ```idris
@@ -61,9 +61,13 @@ Now, let us come up with something that is not referentially
 transparent (don't do this!):
 
 ```idris
+-- create a new mutable reference outside of `IO`:
+-- don't do this!
 mkRef : Nat -> IORef Nat
 mkRef = unsafePerformIO . newIORef
 
+-- read and write to a mutable reference outside
+-- of `IO`: don't do this!
 callAndSum : IORef Nat -> Nat -> Nat
 callAndSum ref n =
   unsafePerformIO $ do
@@ -71,28 +75,47 @@ callAndSum ref n =
     readIORef ref
 
 refNat1 : Nat
-refNat1 =
-  let ref := mkRef 0
-   in callAndSum ref 10 + callAndSum ref 10
+refNat1 = callAndSum (mkRef 0) 10 + callAndSum (mkRef 0) 10
 
 refNat2 : Nat
 refNat2 =
   let ref := mkRef 0
-      x   := callAndSum ref 10
+   in callAndSum ref 10 + callAndSum ref 10
+
+refNat3 : Nat
+refNat3 =
+  let x := callAndSum (mkRef 0) 10
    in x + x
 ```
 
 If you checkout the values of `refNat1` and `refNat2` at the
 REPL (by invoking `:exec printLn refNat1`), you will note
 that they are not the same. Obviously, we can't just replace
-`callAndSum ref 10` with the value it evaluates to without
+`mkRef 0` with the value it evaluates to without
 changing a program's behavior. The reason for this is that
-`callAndSum` reads and updates a mutable variable, thus
-changing its behavior with every new invocation. This is
+`callAndSum` reads and updates a mutable variable thus
+changing its behavior whenever it is invoked several times with
+the same mutable variable. This is
 the opposite of referential transparency, and if the compiler
 decided to convert `refNat1` to the form of `refNat2` as an
 optimization, we would start to see different behavior probably
 depending on the optimization level set at the compiler.
+
+Note, however, that `refNat3` evaluates to the same value as
+`refNat1`, and that's actually what this library is all about:
+If we keep a mutable reference local to a computation, that is,
+we create it and read and write to it as part of an isolate computation
+without letting it leak out, that computation is still referentially
+transparent, because the usage of a mutable reference is not
+observable from the outside. The problem with `refNat2` is
+that we pass *the same reference* around, so that it can freely be
+mutated during or between function calls. This makes the result
+of a function invocation dependent on the reference's current state,
+and that's what's breaking referential transparency.
+
+To recap: In the examples above `callAndSum (mkRef 0) 10` is a
+referentially transparent expression, while `callAndSum ref 10` is
+not.
 
 ### But what about `IO`?
 
