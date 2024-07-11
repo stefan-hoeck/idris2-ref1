@@ -113,9 +113,9 @@ mutated during or between function calls. This makes the result
 of a function invocation dependent on the reference's current state,
 and that's what's breaking referential transparency.
 
-To recap: In the examples above `callAndSum (mkRef 0) 10` is a
-referentially transparent expression, while `callAndSum ref 10` is
-not.
+To recap: In the examples above `callAndSum (mkRef x) y` is a
+referentially transparent expression for all `x` and `y`,
+while `callAndSum ref x` is not.
 
 ### But what about `IO`?
 
