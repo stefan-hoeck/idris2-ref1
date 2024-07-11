@@ -374,5 +374,24 @@ Now, that's more to our liking: Nice and declarative. And indeed,
 the state monad together with traverse makes for a nice user
 experience.
 
+### Performance Overhead
+
+Monadic code in Idris currently comes with a considerable
+overhead in performance: Zipping the values in a list with
+their index is about ten times slower when using `traverse`
+with `State` than with explicit recursion. In addition,
+`traverse` cannot be made tail recursive unless it is
+manually specialize for `State`, in which case we might
+just as well ditch the `State` monad altogether. And
+stack safety is important on all backends with a limted
+stack size such as the JavaScript backends. There,
+`zipWithIndexListState` will overflow the call stack
+for lists holding more than a couple of thousand elements.
+
+So, with the above two options it seems like we either get
+raw performance but have to write explicit recursions,
+which is not exactly declarative programming, or we
+lose in terms of performance and stack safety when using
+powerful declarative tools such as `traverse`.
 <!-- vi: filetype=idris2:syntax=markdown
 -->
