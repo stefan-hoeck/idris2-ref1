@@ -14,6 +14,7 @@ imports.
 ```idris
 module README
 
+import Control.Monad.State
 import Data.IORef
 import System.Clock
 
@@ -99,14 +100,14 @@ Yes, we need to talk about how `IO` works under the hood and
 how it upholds referential transparency. Obviously, a
 function such as `getLine` (of type `IO String`) yields
 a different result every time it is run depending on
-user input. How can *that* be referentially transparent.
+user input. How can that be referentially transparent.
 
 Well, `IO a` is a wrapper around `PrimIO a`, and that is an alias
-for `(1 w : %World) -> IORes a`. Now, what is *that* supposed to mean.
+for `(1 w : %World) -> IORes a`. Now, what is that supposed to mean?
 First, this value of type `%World` represents the current state
 of the world: You computer's hard-drive, mouse position, the
 temperature outside, number of babies currently filling their
-diapers, everything: The whole universe. "How can that *fit*
+diapers, everything: The whole universe. "How can that fit
 into a single variable?", I hear you say. Well, it doesn't, nor
 does it have to. `%World` is just a semantic token: It *represents*
 the state of the world. It is important to note that it comes
@@ -119,8 +120,8 @@ And that's it! That's the whole magic of `IO`. Semantically, an
 `IO` action consumes the current state of the world and returns
 a result together with an *updated* state of the world. Since
 no two world states are semantically the same, we can never
-invoke an `IO` action with the same arguments twice, so it
-*does not have to* ever return the same result again.
+invoke an `IO` action with the same argument twice, so it
+does not have to ever return the same result again.
 
 Sounds like cheating? It is not. It actually works so well
 and behaves exactly as expected, that huge effectful programs
@@ -128,45 +129,165 @@ can be safely built on top of this. But there is a caveat:
 We are not supposed to have a value of type `%World`: It must
 be provided by the runtime of our program when invoking the
 `main` function. After that, the world state will be threaded
-through the whole program, running all `IO` actions, which
-will then return an "updated" world that will be passed on
+through the whole program, running all `IO` actions in sequence,
+all of which will return an "updated" world that will be passed on
 downstream.
 
 We can actually look at how this works with an example:
 
 ```idris
 printTimePrim : PrimIO ()
-printTimePrim w =
-  let MkIORes t1 w2 := toPrim (clockTime UTC) w
+printTimePrim w1 =
+  let MkIORes t1 w2 := toPrim (clockTime UTC) w1
       MkIORes () w3 := toPrim (putStrLn "The current time is: ") w2
       MkIORes () w4 := toPrim (printLn t1) w3
       MkIORes t2 w5 := toPrim (clockTime UTC) w4
       MkIORes () w6 := toPrim (putStrLn "Now the time is: ") w5
-   in toPrim (printLn t1) w6
+   in toPrim (printLn t2) w6
+
+printTime : IO ()
+printTime = primIO printTimePrim
 ```
 
 In the code above, we converted all `IO` actions to `PrimIO` functions
 by using utility `toPrim`. This is allowed and a safe thing to do! In
 `PrimIO`, we run computations with side effects by passing around
-the `%World` token explicitly (starting with `w`). Every effectful
+the `%World` token explicitly (starting with `w1`). Every effectful
 computation will consume the current world state, and - since it has
 linear quantity - we will not be able to ever use it again. Instead,
 we get a new value of type `%World` (again at quantity one) wrapped
 up in an `IORes`: The "updated" world state. Therefore, it is perfectly
 fine that the two calls to `clockTime UTC` (they read the current system
 clock) do not return the same time: They are invoked with distinct
-world tokens (`w` and `w4, respectively).
+world tokens (`w1` and `w4`, respectively).
 
-Of course, the code above is quite verbose, compared to other imperative
+In addition, we cannot ever break out of this `IO` stuff: Since every
+`IO` action (remember, that's just a wrapper around `PrimIO`) returns
+a new `%World` token of quantity one, we can't just drop the `%World`
+token but have to pass it downstream, where it again needs to be
+consumed exactly once. This means, that there is no legal way to
+break out of `IO`, i.e. there is no function of type `IO a -> a`,
+because such a function would not be referentially transparent
+in general.
+
+Of course, the code above is quite verbose compared to other imperative
 languages (because that's what it is: imperative code!), so we define
-a monad on top of all of this `IO`, allowing us to run this stuff nicely
-in a `do` block.
+a monad on top of all of this `IO` stuff, allowing us to sequence actions
+nicely in in `do` blocks.
+
+```idris
+printTimeIO : IO ()
+printTimeIO = do
+  t1 <- clockTime UTC
+  putStrLn "The current time is: "
+  printLn t1
+  t2 <- clockTime UTC
+  putStrLn "Now the time is: "
+  printLn t2
+```
 
 To sum this up: Every evaluation of an `IO` action consumes the
 current world state, and we can't reuse it, nor will we ever get it back.
 Therefore - by design - an `IO` action *can't* be invoked with the same
 arguments twice, and so it does not have to ever return the same
 result in a predictable manner.
+
+### But can't we cheat?
+
+Sometimes we need to, especially when interacting with the foreign
+function interface (FFI), where all guarantees are off anyway.
+Therefore, `%MkWorld` is a value of type `%World` that's available
+to us, and we can theoretically destroy (consume) a value of this
+type by pattern-matching on it. This allows us
+to implement functions such as `unsafePerformIO` in the Prelude.
+But we must never do that unless we know exactly why we are
+doing it and what the consequences are.
+
+## Stateful Computations
+
+A special case of computations with side effects are those that
+read and update mutable state. Before we are going to look
+at how to work safely with proper mutable references, we are
+going to look at some pure alternatives.
+
+Assume, we'd like to pair every value of a container type
+with an index representing the order at which it was
+encountered. For lists, this is very simple, but not very
+pretty:
+
+```idris
+zipWithIndexList : List a -> List (Nat,a)
+zipWithIndexList = go 0
+  where
+    go : Nat -> List a -> List (Nat,a)
+    go n []      = []
+    go n (x::xs) = (n,x) :: go (S n) xs
+```
+
+As you can see, we thread the changing state (the current index,
+represented by a natural number) through the computation, updating
+it on every recursive call. This works nicely and is OK to read
+although we use explicit recursion.
+
+Let's try something a bit more involved: Pairing the values
+in a rose tree with their index:
+
+```idris
+data Tree : Type -> Type where
+  Leaf : (val : a) -> Tree a
+  Node : List (Tree a) -> Tree a
+```
+
+In order to zip a tree's values with their index, we need to be
+a bit more creative: We not only return the updated tree
+on every recursive call but also the last index encountered:
+
+```idris
+zipWithIndexTree : Tree a -> Tree (Nat, a)
+zipWithIndexTree t = snd $ go t 0
+  where
+    go : Tree a -> Nat -> (Nat,Tree (Nat,a))
+
+    many : List (Tree a) -> Nat -> (Nat,List (Tree (Nat,a)))
+    many []        k = (k,[])
+    many (x :: xs) k =
+      let (k2,y)  := go x k
+          (k3,ys) := many xs k2
+       in (k3,y::ys)
+
+    go (Leaf v)  n = (S n, Leaf (n,v))
+    go (Node ts) n = let (n2,ts) := many ts n in (n2,Node ts)
+```
+
+Now, that's quite a mouth full. And if we plan to statefully update
+a tree in another way, we have to write all that again! Surely that's
+not how things should be.
+
+## A declarative and pure Solution: `traverse` and the `State` monad
+
+Surely we can to better than that? We can. Note, how all
+sub-computations in `zipWithIndexTree` end on function type
+`Nat -> (Nat,a)` for different types `a`? We can abstract over
+this function type and wrap it up in a new data constructor.
+That's the `State` monad. And just like `IO a` is a monadic wrapper
+for `PrimIO a`, `State s a` is a wrapper for `s -> (s,a)`. Note also,
+how the code above with its `let`-bindings and pattern matches
+on pairs, resembles the `PrimIO` code we wrote above. That's no
+coincidence: Both describe pure, stateful computations after all.
+
+Now, I'm not going to look at the state monad in detail, but I'll
+show how it can be used to convert ugly explicit recursion
+into declarative code. First, the stateful computation that pairs a
+value with the current index and increases the
+index by one afterwards:
+
+```idris
+pairWithIndex : a -> State Nat (Nat,a)
+pairWithIndex v = do
+  x <- get
+  put (S x)
+  pure (x,v)
+```
 
 <!-- vi: filetype=idris2:syntax=markdown
 -->
