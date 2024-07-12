@@ -15,10 +15,15 @@ imports.
 module README
 
 import Control.Monad.State
+import Control.Monad.ST
 import Data.IORef
+import Data.Linear.Ref1
+import Data.Linear.Traverse1
+import Derive.Prelude
 import System.Clock
 
 %default total
+%language ElabReflection
 ```
 
 ## Purity and Side Effects
@@ -241,7 +246,7 @@ result in a predictable manner.
 
 ### But can't we cheat?
 
-Sometimes we need to, especially when interacting with the foreign
+Sometimes we have to, especially when interacting with the foreign
 function interface (FFI) where all guarantees are off anyway.
 Therefore, `%MkWorld` is a value of type `%World` that's available
 to us, and we can theoretically destroy (consume) a value of this
@@ -283,6 +288,8 @@ in a rose tree with their index:
 data Tree : Type -> Type where
   Leaf : (val : a) -> Tree a
   Node : List (Tree a) -> Tree a
+
+%runElab derive "Tree" [Show,Eq]
 ```
 
 In order to zip a tree's values with their index, we need to be
@@ -393,5 +400,159 @@ raw performance but have to write explicit recursions,
 which is not exactly declarative programming, or we
 lose in terms of performance and stack safety when using
 powerful declarative tools such as `traverse`.
+
+### The `ST` Monad
+
+As an alternative to the `State` monad, the `ST` monad
+(from `Control.Monad.ST`) offers true mutable state
+localized to pure stateful computations. It is based
+Haskell's [Lazy Functional State Threads](https://www.microsoft.com/en-us/research/wp-content/uploads/1994/06/lazy-functional-state-threads.pdf),
+which offers safe encapsulation of mutable state
+in pure, referential transparent computations.
+
+The key idea is, that the `ST` monad is parameterized
+by a phantom type (a type parameter with no runtime
+relevance): `ST s a`. Mutable arrays and references are
+then parameterized by the same phantom type `s`, so
+that a mutable reference invariably belongs to a specific,
+single-threaded computation. For instance:
+
+```idris
+pairWithIndexST : STRef s Nat -> a -> ST s (Nat,a)
+pairWithIndexST ref v = do
+  x <- readSTRef ref
+  writeSTRef ref (S x)
+  pure (x,v)
+
+zipWithIndexST : Traversable f => f a -> f (Nat,a)
+zipWithIndexST t =
+  runST $ newSTRef 0 >>= \ref => traverse (pairWithIndexST ref) t
+```
+
+The code looks similar to what a traversal with `State` offers,
+but it uses a proper mutable reference internally and thus
+performs about twice as fast as the version with the state monad.
+
+However, in order to make this safe, great care must be taken to
+not leak any mutable state into the outside world. To guarantee this,
+function `runST` only accepts computations that are universally
+quantified over `s`: Such a function can never leak a mutable
+reference, because the reference would be bound to a concrete
+state thread and thus, to a concrete phantom type `s`. That's
+a type error. It is also not possible to smuggle out a mutable
+reference in an existential type and still use it at a later time.
+For that to work, we'd have to show that the tag of the current
+state thread is the same as the one of the mutable reference.
+Since `s` is erased, we have no way of comparing two such
+tags. Let's quickly look at both types of safety guard.
+
+In the following example, we try to leak out a mutable reference
+to the outside world in order to (unsafely!) use it in a later
+computation:
+
+```idris
+failing
+  leak1 : STRef s Nat
+  leak1 = runST (newSTRef 1)
+```
+
+As you can see, this does not work. We cannot get something tagged with
+phantom type `s` out of an `ST` computation. Changing `s` to something
+different does also not work: It is still universally quantified in `runST`:
+
+```idris
+failing
+  leak2 : STRef s Nat
+  leak2 = runST (newSTRef 1)
+```
+
+In the next example, we try to trick Idris into leaking an existentially
+type reference:
+
+```idris
+record ExRef a where
+  constructor ER
+  {0 state : Type}
+  ref : STRef state a
+
+leak3 : ExRef Nat
+leak3 = runST (ER <$> newSTRef 1)
+```
+
+It works! Ha, now we are going to do some evil stuff!
+
+```idris
+failing
+  useExRef : ExRef a -> ST s ()
+  useExRef (ER ref) = writeSTRef ref 10
+```
+
+Doh. Idris does not accept this because `state` does not unify with `s`.
+These last examples should demonstrate that it is indeed safe use mutable
+references (and also arrays) within the `ST` monad, because even if we
+manage to get them out of `ST`, they can no longer be used at all.
+
+And yet, `ST` is still considerably slower than explicit recursion.
+In addition, `traverse` is still not stack-safe, so it can't be used
+with large lists on the JavaScript (and similar) backends.
+
+## Enter: `Ref1`
+
+I am now going to show how the limitations demonstrated above
+can be overcome by using mutable reference tagged in a similar way
+as `STRef` but bound to a linear token with the same tag that
+guarantees the computation stays in the same computational thread.
+
+This is going to replace `ST s`, and comes without the overhead from
+using a monad to sequence computations. The code therefore closely
+resembles the raw let bindings of `PrimIO`. Here's the example for
+zipping the values in a list with their index:
+
+```idris
+pairWithIndex1 : Ref1 () s Nat => a -> F1 s (Nat, a)
+pairWithIndex1 v t1 =
+  let n # t2 := read1 t1
+   in (n,v) # write1 (S n) t2
+
+zipWithIndex1 : Traversable1 f => f a -> f (Nat,a)
+zipWithIndex1 as = withRef1 0 (traverse1 pairWithIndex1 as)
+```
+
+```idris
+
+foldl1Tree : (a -> e -> F1 s a) -> a -> Tree e -> F1 s a
+foldl1Tree f v (Leaf w)  t = f v w t
+foldl1Tree f v (Node xs) t = assert_total $ foldl1 (foldl1Tree f) v xs t
+
+foldr1Tree : (e -> a -> F1 s a) -> a -> Tree e -> F1 s a
+foldr1Tree f v (Leaf w)  t = f w v t
+foldr1Tree f v (Node xs) t = assert_total $ foldr1 (flip $ foldr1Tree f) v xs t
+
+foldMap1Tree : Monoid m => (a -> F1 s m) -> Tree a -> F1 s m
+foldMap1Tree f (Leaf w)  t = f w t
+foldMap1Tree f (Node xs) t = assert_total $ foldMap1 (foldMap1Tree f) xs t
+
+traverse1_Tree : (a -> F1' s) -> Tree a -> F1' s
+traverse1_Tree f (Leaf w)  t = f w t
+traverse1_Tree f (Node xs) t =
+  assert_total $ traverse1_ (traverse1_Tree f) xs t
+
+traverse1Tree : (a -> F1 s b) -> Tree a -> F1 s (Tree b)
+traverse1Tree f (Leaf w)  t = mapR1 Leaf $ f w t
+traverse1Tree f (Node xs) t =
+  assert_total $ mapR1 Node (traverse1 (traverse1Tree f) xs t)
+
+export %inline
+Foldable1 Tree where
+  foldl1     = foldl1Tree
+  foldr1     = foldr1Tree
+  foldMap1   = foldMap1Tree
+  traverse1_ = traverse1_Tree
+
+export %inline
+Traversable1 Tree where
+  traverse1 = traverse1Tree
+```
+
 <!-- vi: filetype=idris2:syntax=markdown
 -->

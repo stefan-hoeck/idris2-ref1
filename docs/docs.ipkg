@@ -4,5 +4,6 @@ authors    = "stefan-hoeck"
 version    = 0.7.0
 sourcedir  = "src"
 depends    = ref1
+           , elab-util
 
 modules = README
