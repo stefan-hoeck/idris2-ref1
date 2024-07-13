@@ -2,3 +2,8 @@
 type   = "local"
 path   = "."
 ipkg   = "ref1.ipkg"
+
+[custom.all.ref1-docs]
+type   = "local"
+path   = "docs"
+ipkg   = "docs.ipkg"

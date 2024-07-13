@@ -97,6 +97,14 @@ readAndMod1At tag f t =
   let v # t2 := read1At tag t
    in v # write1At tag (f v) t2
 
+||| Runs the given stateful computation only when given boolean flag
+||| is currently at `True`
+export
+whenRef1 : (0 tag : _) -> Ref1 tag s Bool => Lazy (F1' s) -> F1' s
+whenRef1 tag f t =
+  let b # t2 := read1At tag t
+   in when1 b f t2
+
 --------------------------------------------------------------------------------
 -- Default utilities
 --------------------------------------------------------------------------------

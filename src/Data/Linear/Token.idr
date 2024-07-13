@@ -88,3 +88,16 @@ run1 f = let v # t := f {s = ()} T in v
 export %inline
 runUr : (forall s . (1 t : T1 s) -> Ur a) -> a
 runUr f = unrestricted (f {s = ()} T)
+
+||| Run the given stateful computation if the boolean value is `True`.
+export
+when1 : Bool -> Lazy (F1' s) -> F1' s
+when1 True  f t = f t
+when1 False _ t = t
+
+||| Run a stateful computation `n` times
+export
+forN : Nat -> F1' s -> F1' s
+forN 0     f t = t
+forN (S k) f t = forN k f (f t)
+
