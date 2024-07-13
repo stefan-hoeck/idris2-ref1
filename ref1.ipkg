@@ -10,4 +10,5 @@ depends    = base         >= 0.7.0
 modules = Data.Linear.List
         , Data.Linear.Ref1
         , Data.Linear.Token
+        , Data.Linear.Token.Syntax
         , Data.Linear.Traverse1

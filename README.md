@@ -18,6 +18,7 @@ import Control.Monad.State
 import Control.Monad.ST
 import Data.IORef
 import Data.Linear.Ref1
+import Data.Linear.Token.Syntax
 import Data.Linear.Traverse1
 import Derive.Prelude
 import System.Clock
@@ -25,6 +26,39 @@ import System.Clock
 %default total
 %language ElabReflection
 ```
+
+## What this Library offers
+
+This is a small library providing a way to use mutable
+references as auto-implicit arguments in pure code, using
+a linear token bound via a parameter to the mutable references
+to make sure all mutable state stays confined within the bounds of
+a pure computation.
+
+An example (that could of course also be written with plain
+tail-recursion in a much simpler way):
+
+```idris
+data Fibo = V1 | V2
+
+nextFibo : Ref1 V1 s Nat => Ref1 V2 s Nat => F1' s
+nextFibo t0 =
+  let f1 # t1 := read1At V1 t0
+      f2 # t2 := read1At V2 t1
+   in write1At V1 f2 (write1At V2 (f1+f2) t2)
+
+fibo : Nat -> Nat
+fibo n =
+  run1 $ Token.Syntax.do
+    r1 <- ref1At V1 1
+    r2 <- ref1At V2 1
+    forN n nextFibo
+    read1At V1
+```
+
+The techniques described in more detail below can also be used with
+linear mutable arrays or byte vectors, which are often much harder to
+replace in performance critical code than mere mutable references.
 
 ## Purity and Side Effects
 
@@ -554,8 +588,106 @@ of type `a` with a new linear token of type `T1 s`. All of this
 allows us to write safe, single-threaded and stateful computations
 in a way that strongly resembles programming in `PrimIO`.
 
-### A Token for Linear Computations
+### A simple Word Count Example
 
+In order to demonstrate the use of tagged references, we are
+going to write a simple word count program that counts characters,
+words, and lines of text in a single traversal of a list of
+characters. I'm not claiming that this is the most elegant or
+declarative way to do this. It just shows how to use tags.
+
+When counting characters, words, and lines, we need three
+mutable references for counting each entity. In addition, we
+need a boolean flag to keep track of word beginnings and ends.
+
+We can define and enum type for these four references:
+
+```idris
+data Tag = Chars | Words | Lines | InWord
+```
+
+With these, we can write a couple of utilities and then the
+main character processing routine. Their result type is
+always `F1' s`, which is an alias for `(1 t : T1 s) -> T1 s`.
+So, this is a function that potentially mutates some state but
+does not produce any other result of interest.
+
+```idris
+inc : (0 tag : _) -> Ref1 tag s Nat => F1' s
+inc tag = mod1At tag S
+
+endWord : Ref1 InWord s Bool => Ref1 Words s Nat => F1' s
+endWord t = write1At InWord False (whenRef1 InWord (inc Words) t)
+
+parameters {auto cs : Ref1 Chars s Nat}
+           {auto ws : Ref1 Words s Nat}
+           {auto ls : Ref1 Lines s Nat}
+           {auto iw : Ref1 InWord s Bool}
+
+  processChar : Char -> F1' s
+  processChar c t =
+    case isAlpha c of
+      True  => inc Chars (write1At InWord True t)
+      False => inc Chars $ endWord $ when1 (c == '\n') (inc Lines) t
+```
+
+The actual `wordCount` function has to setup all mutable variables,
+traverse the sequence of characters, and read the final values from
+the mutable refs.
+
+```idris
+record WordCount where
+  constructor WC
+  chars : Nat
+  words : Nat
+  lines : Nat
+
+%runElab derive "WordCount" [Show,Eq]
+
+wordCount1 : String -> WordCount
+wordCount1 "" = WC 0 0 0
+wordCount1 s  =
+  run1 $ \t1 =>
+    let cs # t2  := ref1At Chars Z t1
+        ws # t3  := ref1At Words Z t2
+        ls # t4  := ref1At Lines (S Z) t3
+        iw # t5  := ref1At InWord False t4
+        t6       := traverse1_ processChar (unpack s) t5
+        t7       := endWord t6
+        x  # t8  := read1At Chars t7
+        y  # t9  := read1At Words t8
+        z  # t10 := read1At Lines t9
+     in WC x y z # t10
+```
+
+This last step is quite verbose. Since this is not a performance-critical
+part of our code (the machinery has to be set up only once in order
+to process potentially huge amounts of text), we can opt for some
+syntactic sugar (from module `Data.Linear.Token.Syntax`):
+
+```idris
+wordCount : String -> WordCount
+wordCount "" = WC 0 0 0
+wordCount s  =
+  run1 $ Token.Syntax.do
+    cs <- ref1At Chars Z
+    ws <- ref1At Words Z
+    ls <- ref1At Lines (S Z)
+    iw <- ref1At InWord False
+    traverse1_ processChar (unpack s)
+    endWord
+    [| WC (read1At Chars) (read1At Words) (read1At Lines) |]
+
+main : IO ()
+main = do
+  printLn (wordCount1 "hello world!\nhow are you?")
+  printLn (wordCount "hello world!\nhow are you?")
+```
+
+That's quite a bit more concise. We used qualified `do` notation, because
+`F1 s` is not a proper monad. Note, however, that this second version of `wordCount`,
+generates quite a bit more code that's also significantly slower, so avoid doing
+this in performance-critical parts of your code.
 
 
 ```idris
