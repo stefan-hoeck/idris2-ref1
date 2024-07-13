@@ -32,8 +32,8 @@ import System.Clock
 This is a small library providing a way to use mutable
 references as auto-implicit arguments in pure code, using
 a linear token bound via a parameter to the mutable references
-to make sure all mutable state stays confined within the bounds of
-a pure computation.
+to make sure all mutable state stays confined within the boundaries
+of a pure computation.
 
 An example (that could of course also be written with plain
 tail-recursion in a much simpler way):
@@ -89,7 +89,7 @@ eight = square 2 + square 2
 In the example above, we compute the same expression `square 2`
 twice, which might be a waste of time if `square` were a long
 running computation. Since `square` is referentially transparent -
-calling with the same argument will always lead to the same
+calling it with the same argument will always lead to the same
 result - we (or the compiler!) can rewrite `eight` in a more efficient way
 by storing the result of evaluating `square 2` in a variable:
 
@@ -131,7 +131,7 @@ If you checkout the values of `refNat1` and `refNat2` at the
 REPL (by invoking `:exec printLn refNat1`), you will note
 that they are not the same. Obviously, we can't just replace
 `mkRef 0` with the value it evaluates to without
-changing a program's behavior. The reason for this is that
+changing the program's behavior. The reason for this is that
 `callAndSum` reads and updates a mutable variable thus
 changing its behavior whenever it is invoked several times with
 the same mutable variable. This is
@@ -298,7 +298,7 @@ going to look at some pure alternatives.
 
 Let's assume we'd like to pair every value of a container type
 with an index representing the order at which it was
-encountered. For lists, this is very simple, but not very
+encountered. For lists, this is very simple but not very
 pretty:
 
 ```idris
@@ -359,8 +359,8 @@ sub-computations in `zipWithIndexTree` end on function type
 this function type and wrap it up in a new data constructor.
 That's the `State` monad. And just like `IO a` is a monadic wrapper
 for `PrimIO a`, `State s a` is a wrapper for `s -> (s,a)`. Note also,
-how the code above with its `let`-bindings and pattern matches
-on pairs, resembles the `PrimIO` code we wrote above. That's no
+how the code with its `let`-bindings and pattern matches
+on pairs, resembles the `PrimIO` code we wrote further above. That's no
 coincidence: Both describe pure, stateful computations after all.
 
 Now, I'm not going to look at the state monad in detail, but I'll
@@ -399,7 +399,7 @@ Traversable Tree where
     assert_total (Node <$> traverse (traverse g) xs)
 ```
 
-And now, it's a simple matter to traverse our data structures
+And now it's a simple matter to traverse our data structures
 with `pairWithIndex` and run the whole thing starting from
 index zero:
 
@@ -411,7 +411,7 @@ zipWithIndexListState : List a -> List (Nat,a)
 zipWithIndexListState = evalState 0 . traverse pairWithIndex
 ```
 
-Now, that's more to our liking: Nice and declarative. And indeed,
+Now that's more to our liking: Nice and declarative. And indeed,
 the state monad together with traverse makes for a nice user
 experience.
 
@@ -422,7 +422,7 @@ overhead in performance: Zipping the values in a list with
 their index is about ten times slower when using `traverse`
 with `State` than with explicit recursion. In addition,
 `traverse` cannot be made tail recursive unless it is
-manually specialize for `State`, in which case we might
+manually specialized for `State`, in which case we might
 just as well ditch the `State` monad altogether. And
 stack safety is important on all backends with a limted
 stack size such as the JavaScript backends. There,
@@ -439,10 +439,10 @@ powerful declarative tools such as `traverse`.
 
 As an alternative to the `State` monad, the `ST` monad
 (from `Control.Monad.ST`) offers true mutable state
-localized to pure stateful computations. It is based
+localized to pure stateful computations. It is based on
 Haskell's [Lazy Functional State Threads](https://www.microsoft.com/en-us/research/wp-content/uploads/1994/06/lazy-functional-state-threads.pdf),
 which offers safe encapsulation of mutable state
-in pure, referential transparent computations.
+in pure, referentially transparent computations.
 
 The key idea is, that the `ST` monad is parameterized
 by a phantom type (a type parameter with no runtime
@@ -496,12 +496,12 @@ different does also not work: It is still universally quantified in `runST`:
 
 ```idris
 failing
-  leak2 : STRef s Nat
+  leak2 : STRef () Nat
   leak2 = runST (newSTRef 1)
 ```
 
 In the next example, we try to trick Idris into leaking an existentially
-type reference:
+typed reference:
 
 ```idris
 record ExRef a where
@@ -522,18 +522,18 @@ failing
 ```
 
 Doh. Idris does not accept this because `state` does not unify with `s`.
-These last examples should demonstrate that it is indeed safe use mutable
+These last examples should demonstrate that it is indeed safe to use mutable
 references (and also arrays) within the `ST` monad, because even if we
 manage to get them out of `ST`, they can no longer be used at all.
 
 And yet, `ST` is still considerably slower than explicit recursion.
 In addition, `traverse` is still not stack-safe, so it can't be used
-with large lists on the JavaScript (and similar) backends.
+with large lists on the JavaScript and similar backends.
 
 ## Enter: `Ref1`
 
 I am now going to show how the limitations demonstrated above
-can be overcome by using mutable reference tagged in a similar way
+can be overcome by using mutable references tagged in a similar way
 as `STRef` but bound to a linear token with the same tag that
 guarantees the computation stays in the same computational thread.
 
@@ -576,8 +576,8 @@ F1 s a = T1 s -@ R1 s a
 ```
 
 This shows us two more ingredients: `T1 s` and `R1 s a`.
-`T1 s` is a linear token, semantically comparable to `%World` in
-that it must be used exactly once to avoid calling a function
+`T1 s` is a linear token comparable to `%World` because
+it must be used exactly once to avoid calling a function
 with mutable state with the same arguments twice. Unlike `%World`,
 we are allowed to create (see below) and destroy (`discard`) such
 tokens at will, thus using them to write pure functions that use
@@ -600,7 +600,7 @@ When counting characters, words, and lines, we need three
 mutable references for counting each entity. In addition, we
 need a boolean flag to keep track of word beginnings and ends.
 
-We can define and enum type for these four references:
+We can define an enum type for these four references:
 
 ```idris
 data Tag = Chars | Words | Lines | InWord
@@ -688,43 +688,6 @@ That's quite a bit more concise. We used qualified `do` notation, because
 `F1 s` is not a proper monad. Note, however, that this second version of `wordCount`,
 generates quite a bit more code that's also significantly slower, so avoid doing
 this in performance-critical parts of your code.
-
-
-```idris
-
-foldl1Tree : (a -> e -> F1 s a) -> a -> Tree e -> F1 s a
-foldl1Tree f v (Leaf w)  t = f v w t
-foldl1Tree f v (Node xs) t = assert_total $ foldl1 (foldl1Tree f) v xs t
-
-foldr1Tree : (e -> a -> F1 s a) -> a -> Tree e -> F1 s a
-foldr1Tree f v (Leaf w)  t = f w v t
-foldr1Tree f v (Node xs) t = assert_total $ foldr1 (flip $ foldr1Tree f) v xs t
-
-foldMap1Tree : Monoid m => (a -> F1 s m) -> Tree a -> F1 s m
-foldMap1Tree f (Leaf w)  t = f w t
-foldMap1Tree f (Node xs) t = assert_total $ foldMap1 (foldMap1Tree f) xs t
-
-traverse1_Tree : (a -> F1' s) -> Tree a -> F1' s
-traverse1_Tree f (Leaf w)  t = f w t
-traverse1_Tree f (Node xs) t =
-  assert_total $ traverse1_ (traverse1_Tree f) xs t
-
-traverse1Tree : (a -> F1 s b) -> Tree a -> F1 s (Tree b)
-traverse1Tree f (Leaf w)  t = mapR1 Leaf $ f w t
-traverse1Tree f (Node xs) t =
-  assert_total $ mapR1 Node (traverse1 (traverse1Tree f) xs t)
-
-export %inline
-Foldable1 Tree where
-  foldl1     = foldl1Tree
-  foldr1     = foldr1Tree
-  foldMap1   = foldMap1Tree
-  traverse1_ = traverse1_Tree
-
-export %inline
-Traversable1 Tree where
-  traverse1 = traverse1Tree
-```
 
 <!-- vi: filetype=idris2:syntax=markdown
 -->
