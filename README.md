@@ -518,6 +518,46 @@ zipWithIndex1 : Traversable1 f => f a -> f (Nat,a)
 zipWithIndex1 as = withRef1 0 (traverse1 pairWithIndex1 as)
 ```
 
+There are several things to note in the code above. First, `Ref1 () s Nat`
+is a mutable reference holding a natural number. It is parameterized over
+the state thread `s` just like `STRef` in the `ST` monad. However, `Ref1`
+comes with another parameter, set to unit (`()`) in the example above.
+
+The idea is to use mutable references as auto-implicit arguments. This
+allows us to conveniently put them in `parameters` blocks thus
+decluttering our function signatures. But then it can be tedious to
+distinguish between mutable references if several of them are
+currently in use. For these occasions, we can tag them with
+something more specific than unit and use functions such as
+`read1At` and `write1At` together with a reference's tag to specify
+exactly, which tag we mean.
+
+Second, the result type of `pairWithIndex1` is `F1 s (Nat,a)`, which
+is function alias just like `PrimIO a`:
+
+```repl
+README> :printdef F1
+0 Data.Linear.Token.F1 : Type -> Type -> Type
+F1 s a = T1 s -@ R1 s a
+```
+
+This shows us two more ingredients: `T1 s` and `R1 s a`.
+`T1 s` is a linear token, semantically comparable to `%World` in
+that it must be used exactly once to avoid calling a function
+with mutable state with the same arguments twice. Unlike `%World`,
+we are allowed to create (see below) and destroy (`discard`) such
+tokens at will, thus using them to write pure functions that use
+mutable state under the hood.
+
+`R1 s a` is a linear result just like `IORes a`, that wraps a result
+of type `a` with a new linear token of type `T1 s`. All of this
+allows us to write safe, single-threaded and stateful computations
+in a way that strongly resembles programming in `PrimIO`.
+
+### A Token for Linear Computations
+
+
+
 ```idris
 
 foldl1Tree : (a -> e -> F1 s a) -> a -> Tree e -> F1 s a
