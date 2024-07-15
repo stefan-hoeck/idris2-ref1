@@ -25,16 +25,21 @@ Ur = (!*)
 ||| without the (significant) performance overhead of monadic code in
 ||| Idris.
 export
-data T1 : (s : Type) -> Type where
-  T : T1 s
+data T1 : (s : Type) -> Type where [external]
 
 %name T1 t,t1,t2,t3
+
+%inline token : T1 s
+token = believe_me (the Bits8 0)
+
+drop : a -> T1 s -> a
+drop v _ = v
 
 ||| Drop a linear token. All associated mutable references and arrays
 ||| will no longer be accessible.
 export %inline
-discard : (1 t : T1 s) -> (1 v : a) -> a
-discard T x = x
+discard : (1 t : T1 s) -> (v : a) -> a
+discard t x = assert_linear (drop x) t
 
 ||| The result of a stateful linear computation.
 |||
@@ -72,7 +77,7 @@ F1 s a = T1 s -@ R1 s a
 ||| the result value must have quantity omega (see the definition of `R1`).
 export %inline
 run1 : (forall s . F1 s a) -> a
-run1 f = let v # t := f {s = ()} T in v
+run1 f = let v # t1 := f {s = ()} token in discard t1 v
 
 ||| Sometimes, it is necessary to let callers decide, when they want to
 ||| get rid of the linear token. This is, for instance, necessary when
@@ -87,7 +92,7 @@ run1 f = let v # t := f {s = ()} T in v
 ||| array (tagged to the now destroyed token) useless.
 export %inline
 runUr : (forall s . (1 t : T1 s) -> Ur a) -> a
-runUr f = unrestricted (f {s = ()} T)
+runUr f = unrestricted (f {s = ()} token)
 
 ||| Run the given stateful computation if the boolean value is `True`.
 export
@@ -100,4 +105,3 @@ export
 forN : Nat -> F1' s -> F1' s
 forN 0     f t = t
 forN (S k) f t = forN k f (f t)
-
