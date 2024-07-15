@@ -1,0 +1,11 @@
+package ref1-profile
+
+authors    = "stefan-hoeck"
+version    = 0.7.0
+sourcedir  = "src"
+depends    = ref1
+           , elab-util
+           , profiler
+
+executable = "profile-ref1"
+main       = Main

@@ -73,7 +73,7 @@ ref1At : (0 tag : _) -> (v : a) -> F1 s (Ref1 tag s a)
 ref1At tag v t = R1 (prim__newRef v) # t
 
 ||| Reads the current value at a mutable reference tagged with `tag`.
-export %inline
+export %noinline
 read1At : (0 tag : _) -> Ref1 tag s a => F1 s a
 read1At _ @{R1 m} t = prim__readRef m # t
 
