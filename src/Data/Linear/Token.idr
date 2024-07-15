@@ -37,7 +37,7 @@ drop v _ = v
 
 ||| Drop a linear token. All associated mutable references and arrays
 ||| will no longer be accessible.
-export %inline
+export %noinline
 discard : (1 t : T1 s) -> (v : a) -> a
 discard t x = assert_linear (drop x) t
 
@@ -75,7 +75,7 @@ F1 s a = T1 s -@ R1 s a
 ||| It is also not possible that the linear token paired with the
 ||| corresponding mutable state leaks into the outer world, because
 ||| the result value must have quantity omega (see the definition of `R1`).
-export %inline
+export %noinline
 run1 : (forall s . F1 s a) -> a
 run1 f = let v # t1 := f {s = ()} token in discard t1 v
 
@@ -90,7 +90,7 @@ run1 f = let v # t1 := f {s = ()} token in discard t1 v
 ||| can happen without copying, if and only if
 ||| the linear token is destroyed at the same time which renders the mutable
 ||| array (tagged to the now destroyed token) useless.
-export %inline
+export %noinline
 runUr : (forall s . (1 t : T1 s) -> Ur a) -> a
 runUr f = unrestricted (f {s = ()} token)
 
