@@ -12,9 +12,17 @@ import public Data.Linear.Token
 -- e.g., in Scheme, passed around as a box
 data Mut : Type -> Type where [external]
 
-%extern prim__newIORef   : a -> (1 x : %World) -> Mut a
-%extern prim__readIORef  : Mut a -> (1 x : %World) -> a
-%extern prim__writeIORef : Mut a -> (val : a) -> (1 x : %World) -> IORes ()
+export %foreign "scheme:(lambda (u x) (box x))"
+                "javascript:lambda:(u,x) => ({value : x})"
+prim__newRef   : a -> Mut a
+
+export %foreign "scheme:(lambda (u x) (unbox x))"
+                "javascript:lambda:(u,x) => x.value"
+prim__readRef  : Mut a -> a
+
+export %foreign "scheme:(lambda (s u x v t) (begin (set-box! x v) t))"
+                "javascript:lambda:(s,u,x,v,t) => {x.value = v; return t;}"
+prim__writeRef : Mut a -> (val : a) -> (1 x : T1 s) -> T1 s
 
 --------------------------------------------------------------------------------
 -- Ref1: A linearily mutable reference
@@ -60,21 +68,19 @@ data Ref1 : (tag : k) -> (s,a : Type) -> Type where
 
 ||| Creates a new mutable reference tagged with `tag` and holding
 ||| initial value `v`.
-export %inline
+export %noinline
 ref1At : (0 tag : _) -> (v : a) -> F1 s (Ref1 tag s a)
-ref1At tag v t = R1 (prim__newIORef v %MkWorld) # t
+ref1At tag v t = R1 (prim__newRef v) # t
 
 ||| Reads the current value at a mutable reference tagged with `tag`.
 export %inline
 read1At : (0 tag : _) -> Ref1 tag s a => F1 s a
-read1At _ @{R1 m} t = prim__readIORef m %MkWorld # t
+read1At _ @{R1 m} t = prim__readRef m # t
 
 ||| Updates the mutable reference tagged with `tag`.
 export
 write1At : (0 tag : _) -> Ref1 tag s a => (val : a) -> F1' s
-write1At _ @{R1 m} val t =
-  let MkIORes _ w := prim__writeIORef m val %MkWorld
-   in t
+write1At _ @{R1 m} val t = prim__writeRef m val t
 
 ||| Modifies the value stored in mutable reference tagged with `tag`.
 export
@@ -87,23 +93,25 @@ mod1At tag f t =
 ||| and returns the updated value.
 export
 modAndRead1At : (0 tag : _) -> Ref1 tag s a => (f : a -> a) -> F1 s a
-modAndRead1At tag f t = read1At tag (mod1At tag f t)
+modAndRead1At tag f t =
+  let t2 := mod1At tag f t
+   in read1At tag t2
 
 ||| Modifies the value stored in mutable reference tagged with `tag`
 ||| and returns the previous value.
 export
 readAndMod1At : (0 tag : _) -> Ref1 tag s a => (f : a -> a) -> F1 s a
 readAndMod1At tag f t =
-  let v # t2 := read1At tag t
-   in v # write1At tag (f v) t2
+  let v # t1 := read1At tag t
+   in v # write1At tag (f v) t1
 
 ||| Runs the given stateful computation only when given boolean flag
 ||| is currently at `True`
 export
 whenRef1 : (0 tag : _) -> Ref1 tag s Bool => Lazy (F1' s) -> F1' s
 whenRef1 tag f t =
-  let b # t2 := read1At tag t
-   in when1 b f t2
+  let b # t1 := read1At tag t
+   in when1 b f t1
 
 --------------------------------------------------------------------------------
 -- Default utilities
@@ -152,5 +160,4 @@ WithRef1 a b = forall s . Ref1 () s a => F1 s b
 ||| Runs a function requiring a linear mutable reference.
 export
 withRef1 : a -> WithRef1 a b -> b
-withRef1 v f =
-  run1 $ \t => let ref # t2 := ref1 v t in f @{ref} t2
+withRef1 v f = run1 $ \t => let ref # t2 := ref1 v t in f @{ref} t2
