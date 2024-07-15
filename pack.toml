@@ -7,3 +7,8 @@ ipkg   = "ref1.ipkg"
 type   = "local"
 path   = "docs"
 ipkg   = "docs.ipkg"
+
+[custom.all.ref1-profile]
+type   = "local"
+path   = "profile"
+ipkg   = "profile.ipkg"
