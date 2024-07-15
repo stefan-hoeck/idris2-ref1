@@ -1,5 +1,8 @@
 module Main
 
+import Control.Monad.Identity
+import Control.Monad.State
+import Control.Monad.ST
 import Data.Linear.Ref1
 import Data.Linear.Token.Syntax
 import Data.Linear.Traverse1
@@ -7,13 +10,6 @@ import Data.List
 import Profile
 
 %default total
-
-zipWithIndexRec : List a -> List (Nat,a)
-zipWithIndexRec = go [<] 0
-  where
-    go : SnocList (Nat,a) -> Nat -> List a -> List (Nat,a)
-    go sp n []      = sp <>> []
-    go sp n (x::xs) = go (sp :< (n,x)) (S n) xs
 
 pairLet : Ref1 () s Nat => a -> F1 s (Nat,a)
 pairLet x t =
@@ -27,11 +23,33 @@ pairSugar v = Syntax.do
   write1 (S n)
   pure (n,v)
 
+pairState : a -> State Nat (Nat,a)
+pairState v = state (\n => (S n, (n,v)))
+
+pairST : STRef s Nat -> a -> ST s (Nat,a)
+pairST ref v = do
+  n <- readSTRef ref
+  writeSTRef ref (S n)
+  pure (n,v)
+
+zipWithIndexRec : List a -> List (Nat,a)
+zipWithIndexRec = go [<] 0
+  where
+    go : SnocList (Nat,a) -> Nat -> List a -> List (Nat,a)
+    go sp n []      = sp <>> []
+    go sp n (x::xs) = go (sp :< (n,x)) (S n) xs
+
 zipWithIndexLet : List a -> List (Nat,a)
 zipWithIndexLet xs = withRef1 0 $ traverse1 pairLet xs
 
 zipWithIndexSugar : List a -> List (Nat,a)
 zipWithIndexSugar xs = withRef1 0 $ traverse1 pairSugar xs
+
+zipWithIndexState : List a -> List (Nat,a)
+zipWithIndexState = evalState 0 . traverse pairState
+
+zipWithIndexST : List a -> List (Nat,a)
+zipWithIndexST xs = runST $ newSTRef Z >>= \ref => traverse (pairST ref) xs
 
 list : Nat -> List String
 list n = List.replicate n "foo"
@@ -52,6 +70,16 @@ bench = Group "ref1"
       [ Single "1"       (basic zipWithIndexSugar $ list 1)
       , Single "1000"    (basic zipWithIndexSugar $ list 1000)
       , Single "1000000" (basic zipWithIndexSugar $ list 1000000)
+      ]
+  , Group "zipWithIndex State"
+      [ Single "1"       (basic zipWithIndexState $ list 1)
+      , Single "1000"    (basic zipWithIndexState $ list 1000)
+      , Single "1000000" (basic zipWithIndexState $ list 1000000)
+      ]
+  , Group "zipWithIndex ST"
+      [ Single "1"       (basic zipWithIndexST $ list 1)
+      , Single "1000"    (basic zipWithIndexST $ list 1000)
+      , Single "1000000" (basic zipWithIndexST $ list 1000000)
       ]
   ]
 
