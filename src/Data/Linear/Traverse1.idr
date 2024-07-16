@@ -182,6 +182,9 @@ traverse1SnocList xs f (sx :< x) t =
    in traverse1SnocList (v::xs) f sx t1
 
 ontoVect : (sx : SnocList a) -> Vect n a -> Vect (length sx + n) a
+ontoVect [<]       xs = xs
+ontoVect (sx :< x) xs =
+  rewrite plusSuccRightSucc (length sx) n in ontoVect sx (x::xs)
 
 export
 traverse1Vect :
