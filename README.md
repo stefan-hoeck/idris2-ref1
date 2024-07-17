@@ -4,12 +4,19 @@ Mutable state is anathema to pure functional programming.
 Or is it? In this library, we explore a way to keep mutable
 references and other mutable data structures
 within the boundaries of pure computations, making sure they
-do not leak into the outside world. This allows us to get
-the raw performance - and sometimes, convenience - of mutable state
-without sacrificing referential transparency.
+do not leak into the outside world - and that they are properly released
+before we are done. This allows us to get the raw performance - and sometimes,
+convenience - of mutable state without sacrificing referential transparency.
 
-This is a literate Idris file, so we'll start with some
-imports.
+Since we get automatic resource management with the approach
+presented here, this can be used for many different kinds of (mutable)
+resources the creation and manipulation of which does not have
+a permanent observable effect: We can allocate (and release!) raw
+C-pointers, mutable arrays, byte vectors, and hash maps; we can even setup
+and tear down a full-fledged in-memory sqlite3 database without
+resorting to `IO`!
+
+This is a literate Idris file, so we'll start with some imports.
 
 ```idris
 module README
@@ -39,21 +46,19 @@ An example (that could of course also be written with plain
 tail-recursion in a much simpler way):
 
 ```idris
-data Fibo = V1 | V2
-
-nextFibo : Ref1 V1 s Nat => Ref1 V2 s Nat => F1' s
-nextFibo t0 =
-  let f1 # t1 := read1At V1 t0
-      f2 # t2 := read1At V2 t1
-   in write1At V1 f2 (write1At V2 (f1+f2) t2)
+nextFibo : (r1,r2 : Ref1 Nat) -> F1' [r1,r2]
+nextFibo r1 r2 t0 =
+  let f1 # t1 := read1 r1 t0
+      f2 # t2 := read1 r2 t1
+   in write1 r1 f2 (write1 r2 (f1+f2) t2)
 
 fibo : Nat -> Nat
 fibo n =
-  run1 $ Token.Syntax.do
-    r1 <- ref1At V1 1
-    r2 <- ref1At V2 1
-    forN n nextFibo
-    read1At V1
+  run1 $ \t0 =>
+    let A r2 t1 := ref1 (S Z) t0
+        A r1 t2 := ref1 (S Z) t1
+        v #  t3 := read1 r1 (forN n (nextFibo r1 r2) t2)
+     in v # (release r1 (release r2 t3))
 ```
 
 The techniques described in more detail below can also be used with
@@ -543,13 +548,13 @@ resembles the raw let bindings of `PrimIO`. Here's the example for
 zipping the values in a list with their index:
 
 ```idris
-pairWithIndex1 : Ref1 () s Nat => a -> F1 s (Nat, a)
-pairWithIndex1 v t1 =
-  let n # t2 := read1 t1
-   in (n,v) # write1 (S n) t2
-
-zipWithIndex1 : Traversable1 f => f a -> f (Nat,a)
-zipWithIndex1 as = withRef1 0 (traverse1 pairWithIndex1 as)
+-- pairWithIndex1 : Ref1 () s Nat => a -> F1 s (Nat, a)
+-- pairWithIndex1 v t1 =
+--   let n # t2 := read1 t1
+--    in (n,v) # write1 (S n) t2
+--
+-- zipWithIndex1 : Traversable1 f => f a -> f (Nat,a)
+-- zipWithIndex1 as = withRef1 0 (traverse1 pairWithIndex1 as)
 ```
 
 There are several things to note in the code above. First, `Ref1 () s Nat`
@@ -603,7 +608,7 @@ need a boolean flag to keep track of word beginnings and ends.
 We can define an enum type for these four references:
 
 ```idris
-data Tag = Chars | Words | Lines | InWord
+-- data Tag = Chars | Words | Lines | InWord
 ```
 
 With these, we can write a couple of utilities and then the
@@ -613,22 +618,22 @@ So, this is a function that potentially mutates some state but
 does not produce any other result of interest.
 
 ```idris
-inc : (0 tag : _) -> Ref1 tag s Nat => F1' s
-inc tag = mod1At tag S
-
-endWord : Ref1 InWord s Bool => Ref1 Words s Nat => F1' s
-endWord t = write1At InWord False (whenRef1 InWord (inc Words) t)
-
-parameters {auto cs : Ref1 Chars s Nat}
-           {auto ws : Ref1 Words s Nat}
-           {auto ls : Ref1 Lines s Nat}
-           {auto iw : Ref1 InWord s Bool}
-
-  processChar : Char -> F1' s
-  processChar c t =
-    case isAlpha c of
-      True  => inc Chars (write1At InWord True t)
-      False => inc Chars $ endWord $ when1 (c == '\n') (inc Lines) t
+-- inc : (0 tag : _) -> Ref1 tag s Nat => F1' s
+-- inc tag = mod1At tag S
+--
+-- endWord : Ref1 InWord s Bool => Ref1 Words s Nat => F1' s
+-- endWord t = write1At InWord False (whenRef1 InWord (inc Words) t)
+--
+-- parameters {auto cs : Ref1 Chars s Nat}
+--            {auto ws : Ref1 Words s Nat}
+--            {auto ls : Ref1 Lines s Nat}
+--            {auto iw : Ref1 InWord s Bool}
+--
+--   processChar : Char -> F1' s
+--   processChar c t =
+--     case isAlpha c of
+--       True  => inc Chars (write1At InWord True t)
+--       False => inc Chars $ endWord $ when1 (c == '\n') (inc Lines) t
 ```
 
 The actual `wordCount` function has to setup all mutable variables,
@@ -636,28 +641,28 @@ traverse the sequence of characters, and read the final values from
 the mutable refs.
 
 ```idris
-record WordCount where
-  constructor WC
-  chars : Nat
-  words : Nat
-  lines : Nat
-
-%runElab derive "WordCount" [Show,Eq]
-
-wordCount1 : String -> WordCount
-wordCount1 "" = WC 0 0 0
-wordCount1 s  =
-  run1 $ \t1 =>
-    let cs # t2  := ref1At Chars Z t1
-        ws # t3  := ref1At Words Z t2
-        ls # t4  := ref1At Lines (S Z) t3
-        iw # t5  := ref1At InWord False t4
-        t6       := traverse1_ processChar (unpack s) t5
-        t7       := endWord t6
-        x  # t8  := read1At Chars t7
-        y  # t9  := read1At Words t8
-        z  # t10 := read1At Lines t9
-     in WC x y z # t10
+-- record WordCount where
+--   constructor WC
+--   chars : Nat
+--   words : Nat
+--   lines : Nat
+--
+-- %runElab derive "WordCount" [Show,Eq]
+--
+-- wordCount1 : String -> WordCount
+-- wordCount1 "" = WC 0 0 0
+-- wordCount1 s  =
+--   run1 $ \t1 =>
+--     let cs # t2  := ref1At Chars Z t1
+--         ws # t3  := ref1At Words Z t2
+--         ls # t4  := ref1At Lines (S Z) t3
+--         iw # t5  := ref1At InWord False t4
+--         t6       := traverse1_ processChar (unpack s) t5
+--         t7       := endWord t6
+--         x  # t8  := read1At Chars t7
+--         y  # t9  := read1At Words t8
+--         z  # t10 := read1At Lines t9
+--      in WC x y z # t10
 ```
 
 This last step is quite verbose. Since this is not a performance-critical
@@ -666,22 +671,22 @@ to process potentially huge amounts of text), we can opt for some
 syntactic sugar (from module `Data.Linear.Token.Syntax`):
 
 ```idris
-wordCount : String -> WordCount
-wordCount "" = WC 0 0 0
-wordCount s  =
-  run1 $ Token.Syntax.do
-    cs <- ref1At Chars Z
-    ws <- ref1At Words Z
-    ls <- ref1At Lines (S Z)
-    iw <- ref1At InWord False
-    traverse1_ processChar (unpack s)
-    endWord
-    [| WC (read1At Chars) (read1At Words) (read1At Lines) |]
-
-main : IO ()
-main = do
-  printLn (wordCount1 "hello world!\nhow are you?")
-  printLn (wordCount "hello world!\nhow are you?")
+-- wordCount : String -> WordCount
+-- wordCount "" = WC 0 0 0
+-- wordCount s  =
+--   run1 $ Token.Syntax.do
+--     cs <- ref1At Chars Z
+--     ws <- ref1At Words Z
+--     ls <- ref1At Lines (S Z)
+--     iw <- ref1At InWord False
+--     traverse1_ processChar (unpack s)
+--     endWord
+--     [| WC (read1At Chars) (read1At Words) (read1At Lines) |]
+--
+-- main : IO ()
+-- main = do
+--   printLn (wordCount1 "hello world!\nhow are you?")
+--   printLn (wordCount "hello world!\nhow are you?")
 ```
 
 That's quite a bit more concise. We used qualified `do` notation, because
