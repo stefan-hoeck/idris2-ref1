@@ -41,7 +41,7 @@ data Ref1 : (a : Type) -> Type where
 ||| initial value `v`.
 export %noinline
 ref1 : (v : a) -> (1 t : T1 rs) -> A1 rs (Ref1 a)
-ref1 v t = A (R1 $ prim__newRef $ believe_me v) (bind t)
+ref1 v t = A (R1 $ prim__newRef $ believe_me v) (unsafeBind t)
 
 ||| Reads the current value at a mutable reference tagged with `tag`.
 export %noinline
@@ -82,6 +82,17 @@ whenRef1 r f t = let b # t1 := read1 r t in when1 b f t1
 export %noinline
 release : (r : Ref1 a) -> (0 p : Res r rs) => (1 t : T1 rs) -> T1 (Drop rs p)
 release r t = unsafeRelease p t
+
+||| Read and releases a mutable reference.
+|||
+||| It will no longer be accessible through the given linear token.
+export %inline
+readAndRelease :
+     (r : Ref1 a)
+  -> {auto 0 p : Res r rs}
+  -> (1 t : T1 rs)
+  -> R1 (Drop rs p) a
+readAndRelease r t = let v # t2 := read1 r t in v # release r t2
 
 --------------------------------------------------------------------------------
 -- Allocating mutable references

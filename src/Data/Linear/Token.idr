@@ -40,11 +40,19 @@ data T1 : (rs : Resources) -> Type where
 
 ||| Bind a new resource to the current linear tag.
 |||
-||| This is for library authors to use when writing FFI bindings.
+||| This is for library authors when writing FFI bindings.
+||| Do not use it unless you know what you are doing! Never use this to
+||| bind an existing resource to a different linear token!
 export %inline
-bind : (1 t : T1 rs) -> T1 (r::rs)
-bind (T p) = T p
+unsafeBind : (1 t : T1 rs) -> T1 (r::rs)
+unsafeBind (T p) = T p
 
+||| Release a resource from the token it was bound to.
+|||
+||| This is for library authors when writing FFI bindings.
+||| Do not use it unless you know what you are doing! Never use this to
+||| release a resource without actually doing the releasing too (such as
+||| freeing the memory allocated for it)!
 export %inline
 unsafeRelease : (0 p : Res r rs) -> (1 t : T1 rs) -> T1 (Drop rs p)
 unsafeRelease _ (T t) = T t
