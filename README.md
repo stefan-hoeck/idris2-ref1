@@ -14,7 +14,12 @@ resources the creation and manipulation of which does not have
 a permanent observable effect: We can allocate (and release!) raw
 C-pointers, mutable arrays, byte vectors, and hash maps; we can even setup
 and tear down a full-fledged in-memory sqlite3 database without
-resorting to `IO`!
+resorting to `IO`! If we stretch the definition of what is an
+"observable effect", we could also work with temporary files and
+directories as long as we remove them all before we are done.
+This adds quite a large subset of effectful computations that can
+now be run and tested as pure functions, because - strictly
+speaking - they are still referentially transparent.
 
 This is a literate Idris file, so we'll start with some imports.
 
@@ -675,8 +680,10 @@ imperative languages, we have to introduce mutable variables before
 we can use them. It is also a bit tedious that we have to manually
 thread our linear token through the whole computation. There is
 some `do` and applicative notation available from `Data.Linear.Token.Syntax`,
-but it does not yet work with resource allocation. Here's the word count
-example with some syntactic sugar:
+but it does not yet work with resource allocation. However, there is
+also utility function `allocRun1`, which allows us to allocate
+all resources from a heterogeneous list in one go.
+Here's the word count example with some syntactic sugar:
 
 ```idris
 wordCount2 : String -> WordCount
