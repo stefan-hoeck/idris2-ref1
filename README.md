@@ -4,12 +4,19 @@ Mutable state is anathema to pure functional programming.
 Or is it? In this library, we explore a way to keep mutable
 references and other mutable data structures
 within the boundaries of pure computations, making sure they
-do not leak into the outside world. This allows us to get
-the raw performance - and sometimes, convenience - of mutable state
-without sacrificing referential transparency.
+do not leak into the outside world - and that they are properly released
+before we are done. This allows us to get the raw performance - and sometimes,
+convenience - of mutable state without sacrificing referential transparency.
 
-This is a literate Idris file, so we'll start with some
-imports.
+Since we get automatic resource management with the approach
+presented here, this can be used for many different kinds of (mutable)
+resources the creation and manipulation of which does not have
+a permanent observable effect: We can allocate (and release!) raw
+C-pointers, mutable arrays, byte vectors, and hash maps; we can even setup
+and tear down a full-fledged in-memory sqlite3 database without
+resorting to `IO`!
+
+This is a literate Idris file, so we'll start with some imports.
 
 ```idris
 module README
@@ -39,21 +46,19 @@ An example (that could of course also be written with plain
 tail-recursion in a much simpler way):
 
 ```idris
-data Fibo = V1 | V2
-
-nextFibo : Ref1 V1 s Nat => Ref1 V2 s Nat => F1' s
-nextFibo t0 =
-  let f1 # t1 := read1At V1 t0
-      f2 # t2 := read1At V2 t1
-   in write1At V1 f2 (write1At V2 (f1+f2) t2)
+nextFibo : (r1,r2 : Ref1 Nat) -> F1' [r1,r2]
+nextFibo r1 r2 t0 =
+  let f1 # t1 := read1 r1 t0
+      f2 # t2 := read1 r2 t1
+   in write1 r1 f2 (write1 r2 (f1+f2) t2)
 
 fibo : Nat -> Nat
 fibo n =
-  run1 $ Token.Syntax.do
-    r1 <- ref1At V1 1
-    r2 <- ref1At V2 1
-    forN n nextFibo
-    read1At V1
+  run1 $ \t0 =>
+    let A r2 t1 := ref1 (S Z) t0
+        A r1 t2 := ref1 (S Z) t1
+        v #  t3 := read1 r1 (forN n (nextFibo r1 r2) t2)
+     in v # (release r1 (release r2 t3))
 ```
 
 The techniques described in more detail below can also be used with
@@ -65,13 +70,13 @@ replace in performance critical code than mere mutable references.
 How does Idris implement computations with side effects such as
 reading files, sending messages over the network, or showing an
 animation on screen? All this can be done in a referentially
-transparent way, by using a simple trick. But first, what does
+transparent way by using a simple trick. But first, what does
 it even mean for a function to be "referentially transparent"?
 
 ### (Breaking) Referential Transparency
 
 An expression is said to be "referentially transparent", if it
-can be replaced with another expression denoting the same value, without
+can be replaced with another expression denoting the same value without
 changing a program's behavior. Or, more simply put, a referentially
 transparent expression can always be replaced with the value it
 evaluates to without changing a program's behavior.
@@ -138,7 +143,8 @@ the same mutable variable. This is
 the opposite of referential transparency, and if the compiler
 decided to convert `refNat1` to the form of `refNat2` as an
 optimization, we would start seeing different behavior probably
-depending on the optimization level set at the compiler.
+depending on the optimization level set at the compiler. Good
+luck debugging this kind of wickedness!
 
 Note however, that `refNat3` evaluates to the same value as
 `refNat1`, and that's actually what this library is all about:
@@ -173,7 +179,7 @@ PrimIO.PrimIO : Type -> Type
 PrimIO a = (1 _ : %World) -> IORes a
 ```
 
-Now, what is that supposed to mean?
+Let's dissect this a bit.
 First, this value of type `%World` represents the current state
 of the world: You computer's hard-drive, mouse position, the
 temperature outside, number of people currently having a drink,
@@ -181,8 +187,8 @@ everything: The whole universe. "How can that fit
 into a single variable?", I hear you say. Well, it doesn't, nor
 does it have to. `%World` is just a semantic token: It *represents*
 the state of the world. At runtime, it is just a constant like `0`,
-`null`, or `undefined` that's being passed around. It is only of
-importance at compile-time.
+`null`, or `undefined` that's being passed around and never inspected.
+It is only of importance at compile-time.
 
 It is important to note that `%World` comes
 at quantity one, so a function of type `IO a` must consume
@@ -223,10 +229,10 @@ can be safely built on top of this. But there are some caveats:
   is, we can't break out of `IO`. We always have a world state of
   quantity one, so we must consume it, but as soon as it has been consumed,
   we get another one, again of quantity one.
-  So, there cannot be a safe function of type `IO a -> a` that extracts
+  Therefore, there cannot be a safe function of type `IO a -> a` that extracts
   a result from `IO`. This would require us to semantically destroy the
   world! Actually, there is `unsafePerformIO`, which has exactly this
-  type, and it is called "unsafe" for a reason.
+  type. It is called "unsafe" for a reason.
 
 We can look at how all of this works with an example:
 
@@ -245,7 +251,7 @@ printTime = primIO printTimePrim
 ```
 
 In the code above, we converted all `IO` actions to `PrimIO` functions
-by using utility `toPrim`. This is allowed and a safe thing to do! In
+by using utility `toPrim`. This is allowed and a safe thing to do. In
 `PrimIO`, we run computations with side effects by passing around
 the `%World` token explicitly (starting with `w1`). Every effectful
 computation will consume the current world state, and - since it has
@@ -360,7 +366,7 @@ this function type and wrap it up in a new data constructor.
 That's the `State` monad. And just like `IO a` is a monadic wrapper
 for `PrimIO a`, `State s a` is a wrapper for `s -> (s,a)`. Note also,
 how the code with its `let`-bindings and pattern matches
-on pairs, resembles the `PrimIO` code we wrote further above. That's no
+on pairs resembles the `PrimIO` code we wrote further above. That's no
 coincidence: Both describe pure, stateful computations after all.
 
 Now, I'm not going to look at the state monad in detail, but I'll
@@ -399,7 +405,7 @@ Traversable Tree where
     assert_total (Node <$> traverse (traverse g) xs)
 ```
 
-And now it's a simple matter to traverse our data structures
+And now it's a simple matter of traversing our data structures
 with `pairWithIndex` and run the whole thing starting from
 index zero:
 
@@ -411,8 +417,15 @@ zipWithIndexListState : List a -> List (Nat,a)
 zipWithIndexListState = evalState 0 . traverse pairWithIndex
 ```
 
+Or, more general (this makes the two functions above redundant):
+
+```idris
+zipWithIndexState : Traversable f => f a -> f (Nat,a)
+zipWithIndexState = evalState 0 . traverse pairWithIndex
+```
+
 Now that's more to our liking: Nice and declarative. And indeed,
-the state monad together with traverse makes for a nice user
+the state monad together with traverse makes for a nice programming
 experience.
 
 ### Performance Overhead
@@ -424,9 +437,9 @@ with `State` than with explicit recursion. In addition,
 `traverse` cannot be made tail recursive unless it is
 manually specialized for `State`, in which case we might
 just as well ditch the `State` monad altogether. And
-stack safety is important on all backends with a limted
+stack safety is important on all backends with a limited
 stack size such as the JavaScript backends. There,
-`zipWithIndexListState` will overflow the call stack
+`zipWithIndexState` will overflow the call stack
 for lists holding more than a couple of thousand elements.
 
 So, with the above two options it seems like we either get
@@ -444,8 +457,8 @@ Haskell's [Lazy Functional State Threads](https://www.microsoft.com/en-us/resear
 which offers safe encapsulation of mutable state
 in pure, referentially transparent computations.
 
-The key idea is, that the `ST` monad is parameterized
-by a phantom type (a type parameter with no runtime
+The key idea to parameterize the `ST` monad
+over a phantom type `s` (a type parameter with no runtime
 relevance): `ST s a`. Mutable arrays and references are
 then parameterized by the same phantom type `s`, so
 that a mutable reference invariably belongs to a specific,
@@ -530,12 +543,15 @@ And yet, `ST` is still considerably slower than explicit recursion.
 In addition, `traverse` is still not stack-safe, so it can't be used
 with large lists on the JavaScript and similar backends.
 
-## Enter: `Ref1`
+In addition, it is currently not possible to get safe allocation-release
+cycles (such as allocating and releasing the memory for a raw C-pointer)
+with the `ST` monad. It is therefore quite limited in its current state.
+
+## Enter: `T1`
 
 I am now going to show how the limitations demonstrated above
-can be overcome by using mutable references tagged in a similar way
-as `STRef` but bound to a linear token with the same tag that
-guarantees the computation stays in the same computational thread.
+can be overcome by using a linear token to which all kinds of
+(mutable!) resources can be bound and use locally in a computation.
 
 This is going to replace `ST s`, and comes without the overhead from
 using a monad to sequence computations. The code therefore closely
@@ -543,97 +559,91 @@ resembles the raw let bindings of `PrimIO`. Here's the example for
 zipping the values in a list with their index:
 
 ```idris
-pairWithIndex1 : Ref1 () s Nat => a -> F1 s (Nat, a)
-pairWithIndex1 v t1 =
-  let n # t2 := read1 t1
-   in (n,v) # write1 (S n) t2
+pairWithIndex1 : (r : Ref1 Nat) -> a -> (1 t : T1 [r]) -> R1 [r] (Nat,a)
+pairWithIndex1 r v t1 =
+  let n # t2 := read1 r t1
+   in (n,v) # write1 r (S n) t2
 
 zipWithIndex1 : Traversable1 f => f a -> f (Nat,a)
-zipWithIndex1 as = withRef1 0 (traverse1 pairWithIndex1 as)
+zipWithIndex1 as = withRef1 0 $ \r => traverse1 (pairWithIndex1 r) as
 ```
 
-There are several things to note in the code above. First, `Ref1 () s Nat`
-is a mutable reference holding a natural number. It is parameterized over
-the state thread `s` just like `STRef` in the `ST` monad. However, `Ref1`
-comes with another parameter, set to unit (`()`) in the example above.
+There are several things to note in the code above. First, `Ref1 Nat`
+is a mutable reference holding a natural number. It is bound to a
+linear token `t`, parameterized with a list of bound resources.
+We cannot use a `Ref1 a` without the token it was bound to, and we cannot
+bind it to a different token without using `unsafeBind`, which is again
+called "unsafe" for a reason. Function `withRef1` allocates and releases
+a mutable reference for us, and we are free to use it in our anonymous
+function (after the dollar sign).
 
-The idea is to use mutable references as auto-implicit arguments. This
-allows us to conveniently put them in `parameters` blocks thus
-decluttering our function signatures. But then it can be tedious to
-distinguish between mutable references if several of them are
-currently in use. For these occasions, we can tag them with
-something more specific than unit and use functions such as
-`read1At` and `write1At` together with a reference's tag to specify
-exactly, which tag we mean.
-
-Second, the result type of `pairWithIndex1` is `F1 s (Nat,a)`, which
-is function alias just like `PrimIO a`:
+The type `(1 t : T1 rs) -> R1 rs a` is so common in this kind of computation,
+that we get a short alias called `F1 rs a` for it:
 
 ```repl
 README> :printdef F1
-0 Data.Linear.Token.F1 : Type -> Type -> Type
-F1 s a = T1 s -@ R1 s a
+0 Data.Linear.Token.F1 : Resources -> Type -> Type
+F1 rs a = T1 rs -@ R1 rs a
 ```
 
-This shows us two more ingredients: `T1 s` and `R1 s a`.
-`T1 s` is a linear token comparable to `%World` because
-it must be used exactly once to avoid calling a function
-with mutable state with the same arguments twice. Unlike `%World`,
-we are allowed to create (see below) and destroy (`discard`) such
-tokens at will, thus using them to write pure functions that use
-mutable state under the hood.
-
 `R1 s a` is a linear result just like `IORes a`, that wraps a result
-of type `a` with a new linear token of type `T1 s`. All of this
+of type `a` with a new linear token of type `T1 rs`. All of this
 allows us to write safe, single-threaded and stateful computations
 in a way that strongly resembles programming in `PrimIO`.
 
+But how does this prevent us from using functions such as `read1` or
+`write1` with a mutable reference together with the wrong linear token?
+When we look at the type of `read1`, we see that there is a link between
+the mutable reference `r` and the list of resources `rs`:
+
+```repl
+README> :t read1
+Data.Linear.Ref1.read1 : (r : Ref1 a) -> {auto 0 _ : Res r rs} -> F1 rs a
+```
+
+A value of type `Res r rs` is a proof that `r` is one of the elements of `rs`,
+that is, `r` is one of the resources bound to the linear token! Since a
+mutable reference will always be bound to the linear token it was created with
+(see function `ref1`), it is not possible to use a mutable reference with
+the wrong token. It therefore becomes completely useless outside of the
+current linear computation.
+
 ### A simple Word Count Example
 
-In order to demonstrate the use of tagged references, we are
+In order to demonstrate how all of this works together, we are
 going to write a simple word count program that counts characters,
 words, and lines of text in a single traversal of a list of
 characters. I'm not claiming that this is the most elegant or
-declarative way to do this. It just shows how to use tags.
+declarative way to do this. It just shows how to create, use, and
+release mutable references.
 
 When counting characters, words, and lines, we need three
 mutable references for counting each entity. In addition, we
 need a boolean flag to keep track of word beginnings and ends.
 
-We can define an enum type for these four references:
-
-```idris
-data Tag = Chars | Words | Lines | InWord
-```
-
 With these, we can write a couple of utilities and then the
 main character processing routine. Their result type is
-always `F1' s`, which is an alias for `(1 t : T1 s) -> T1 s`.
-So, this is a function that potentially mutates some state but
-does not produce any other result of interest.
+always `F1' rs`, which is an alias for `(1 t : T1 rs) -> T1 rs`.
+So, these are functions that potentially mutate some state but
+do not produce any other results of interest.
 
 ```idris
-inc : (0 tag : _) -> Ref1 tag s Nat => F1' s
-inc tag = mod1At tag S
+inc : (r : Ref1 Nat) -> (0 p : Res r rs) => F1' rs
+inc r = mod1 r S
 
-endWord : Ref1 InWord s Bool => Ref1 Words s Nat => F1' s
-endWord t = write1At InWord False (whenRef1 InWord (inc Words) t)
+endWord : (b : Ref1 Bool) -> (w : Ref1 Nat) -> F1' [c,w,l,b]
+endWord b w t = write1 b False (whenRef1 b (inc w) t)
 
-parameters {auto cs : Ref1 Chars s Nat}
-           {auto ws : Ref1 Words s Nat}
-           {auto ls : Ref1 Lines s Nat}
-           {auto iw : Ref1 InWord s Bool}
-
-  processChar : Char -> F1' s
-  processChar c t =
-    case isAlpha c of
-      True  => inc Chars (write1At InWord True t)
-      False => inc Chars $ endWord $ when1 (c == '\n') (inc Lines) t
+processChar : (c,w,l : Ref1 Nat) -> (b : Ref1 Bool) -> Char -> F1' [c,w,l,b]
+processChar c w l b x t =
+  case isAlpha x of
+    True  => inc c (write1 b True t)
+    False => inc c $ endWord b w $ when1 (x == '\n') (inc l) t
 ```
 
 The actual `wordCount` function has to setup all mutable variables,
-traverse the sequence of characters, and read the final values from
-the mutable refs.
+traverse the sequence of characters, read the final values from
+the mutable refs, and cleanup everything at the end.
 
 ```idris
 record WordCount where
@@ -644,44 +654,50 @@ record WordCount where
 
 %runElab derive "WordCount" [Show,Eq]
 
-wordCount1 : String -> WordCount
-wordCount1 "" = WC 0 0 0
-wordCount1 s  =
-  run1 $ \t1 =>
-    let cs # t2  := ref1At Chars Z t1
-        ws # t3  := ref1At Words Z t2
-        ls # t4  := ref1At Lines (S Z) t3
-        iw # t5  := ref1At InWord False t4
-        t6       := traverse1_ processChar (unpack s) t5
-        t7       := endWord t6
-        x  # t8  := read1At Chars t7
-        y  # t9  := read1At Words t8
-        z  # t10 := read1At Lines t9
-     in WC x y z # t10
-```
-
-This last step is quite verbose. Since this is not a performance-critical
-part of our code (the machinery has to be set up only once in order
-to process potentially huge amounts of text), we can opt for some
-syntactic sugar (from module `Data.Linear.Token.Syntax`):
-
-```idris
 wordCount : String -> WordCount
 wordCount "" = WC 0 0 0
 wordCount s  =
-  run1 $ Token.Syntax.do
-    cs <- ref1At Chars Z
-    ws <- ref1At Words Z
-    ls <- ref1At Lines (S Z)
-    iw <- ref1At InWord False
-    traverse1_ processChar (unpack s)
-    endWord
-    [| WC (read1At Chars) (read1At Words) (read1At Lines) |]
+  run1 $ \t =>
+    let A b t  := ref1 False t
+        A l t  := ref1 (S Z) t
+        A w t  := ref1 Z t
+        A c t  := ref1 Z t
+        t      := traverse1_ (processChar c w l b) (unpack s) t
+        t      := endWord b w t
+        x  # t := readAndRelease c t
+        y  # t := readAndRelease w t
+        z  # t := readAndRelease l t
+     in WC x y z # release b t
+```
 
+This last step is quite verbose. This is to be expected: Just like in
+imperative languages, we have to introduce mutable variables before
+we can use them. It is also a bit tedious that we have to manually
+thread our linear token through the whole computation. There is
+some `do` notation available from `Data.Linear.Token.Syntax`, but it
+is currently only implemented for those cases where the list of
+resources stays constant. This might change in future versions of
+this library.
+
+However, we gain a lot from all of this: Fast, mutable state localised
+to pure computations together with safe resource management. To understand
+this, look at the type of `run1`:
+
+```repl
+README> :t run1
+Data.Linear.Token.run1 : F1 [] a -> a
+```
+
+We extract a value of type `a` from a linear computation that
+*starts and ends* with zero allocated resources: We can't forget to
+release all resources that we set up along the way!
+
+Finally, we can test our mini application:
+
+```idris
+covering
 main : IO ()
-main = do
-  printLn (wordCount1 "hello world!\nhow are you?")
-  printLn (wordCount "hello world!\nhow are you?")
+main = printLn (wordCount "hello world!\nhow are you?")
 ```
 
 That's quite a bit more concise. We used qualified `do` notation, because

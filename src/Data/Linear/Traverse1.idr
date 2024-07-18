@@ -221,10 +221,10 @@ Traversable1 List1 where
 -- Utilities
 --------------------------------------------------------------------------------
 
-pairIx : Ref1 () s Nat => a -> F1 s (Nat,a)
-pairIx v t = mapR1 (,v) (readAndMod1 S t)
+pairIx : (r : Ref1 Nat) -> a -> F1 [r] (Nat,a)
+pairIx r v t = mapR1 (,v) (readAndMod1 r S t)
 
 ||| Pairs each value in a data structure with its index of appearance.
 export %inline
 zipWithIndex : Traversable1 f => f a -> f (Nat,a)
-zipWithIndex as = withRef1 Z (traverse1 pairIx as)
+zipWithIndex as = withRef1 Z $ \r => (traverse1 (pairIx r) as)
