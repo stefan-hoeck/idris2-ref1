@@ -80,7 +80,7 @@ whenRef1 r f t = let b # t1 := read1 r t in when1 b f t1
 |||
 ||| It will no longer be accessible through the given linear token.
 export %noinline
-release : (r : Ref1 a) -> (0 p : Res r rs) => (1 t : T1 rs) -> T1 (Drop rs p)
+release : (r : Ref1 a) -> (0 p : Res r rs) => C1' rs (Drop rs p)
 release r t = unsafeRelease p t
 
 ||| Read and releases a mutable reference.
@@ -90,8 +90,7 @@ export %inline
 readAndRelease :
      (r : Ref1 a)
   -> {auto 0 p : Res r rs}
-  -> (1 t : T1 rs)
-  -> R1 (Drop rs p) a
+  -> C1 rs (Drop rs p) a
 readAndRelease r t = let v # t2 := read1 r t in v # release r t2
 
 --------------------------------------------------------------------------------
@@ -109,6 +108,6 @@ export
 withRef1 : a -> WithRef1 a b -> b
 withRef1 v f =
   run1 $ \t =>
-    let A r t2 := ref1 v t
-        v # t3 := f r t2
-     in v # release r t3
+    let A r t := ref1 v t
+        v # t := f r t
+     in v # release r t

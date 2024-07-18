@@ -14,7 +14,12 @@ resources the creation and manipulation of which does not have
 a permanent observable effect: We can allocate (and release!) raw
 C-pointers, mutable arrays, byte vectors, and hash maps; we can even setup
 and tear down a full-fledged in-memory sqlite3 database without
-resorting to `IO`!
+resorting to `IO`! If we stretch the definition of what is an
+"observable effect", we could also work with temporary files and
+directories as long as we remove them all before we are done.
+This adds quite a large subset of effectful computations that can
+now be run and tested as pure functions, because - strictly
+speaking - they are still referentially transparent.
 
 This is a literate Idris file, so we'll start with some imports.
 
@@ -674,14 +679,27 @@ This last step is quite verbose. This is to be expected: Just like in
 imperative languages, we have to introduce mutable variables before
 we can use them. It is also a bit tedious that we have to manually
 thread our linear token through the whole computation. There is
-some `do` notation available from `Data.Linear.Token.Syntax`, but it
-is currently only implemented for those cases where the list of
-resources stays constant. This might change in future versions of
-this library.
+some `do` and applicative notation available from `Data.Linear.Token.Syntax`,
+but it does not yet work with resource allocation. However, there is
+also utility function `allocRun1`, which allows us to allocate
+all resources from a heterogeneous list in one go.
+Here's the word count example with some syntactic sugar:
 
-However, we gain a lot from all of this: Fast, mutable state localised
-to pure computations together with safe resource management. To understand
-this, look at the type of `run1`:
+```idris
+wordCount2 : String -> WordCount
+wordCount2 "" = WC 0 0 0
+wordCount2 s  =
+  allocRun1 [ref1 0,ref1 0,ref1 1,ref1 False] $ \[c,w,l,b] => Syntax.do
+    traverse1_ (processChar c w l b) (unpack s)
+    endWord b w
+    release b
+    [| WC (readAndRelease c) (readAndRelease w) (readAndRelease l) |]
+```
+
+Even though syntax is not yet perfect,
+we gain a lot from all of this: Fast, mutable state localised
+to pure computations together with safe resource management.
+To understand this, look at the type of `run1`:
 
 ```repl
 README> :t run1
@@ -697,7 +715,9 @@ Finally, we can test our mini application:
 ```idris
 covering
 main : IO ()
-main = printLn (wordCount "hello world!\nhow are you?")
+main = do
+  printLn (wordCount "hello world!\nhow are you?")
+  printLn (wordCount2 "hello world!\nhow are you?")
 ```
 
 That's quite a bit more concise. We used qualified `do` notation, because
