@@ -14,12 +14,14 @@ resources the creation and manipulation of which does not have
 a permanent observable effect: We can allocate (and release!) raw
 C-pointers, mutable arrays, byte vectors, and hash maps; we can even setup
 and tear down a full-fledged in-memory sqlite3 database without
-resorting to `IO`! If we stretch the definition of what is an
-"observable effect", we could also work with temporary files and
-directories as long as we remove them all before we are done.
-This adds quite a large subset of effectful computations that can
-now be run and tested as pure functions, because - strictly
-speaking - they are still referentially transparent.
+resorting to `IO`! If we stretched the definition of what is an
+"observable effect", we could even work with temporary files and
+directories as long as we removed them all before we were done.
+This adds quite a large subset of effectful computations to the list
+of things that can be run and tested as pure functions, because all
+mutable state is confined within the boundaries of these computations,
+so that they are still referentially transparent when viewed from
+the outside.
 
 This is a literate Idris file, so we'll start with some imports.
 
@@ -42,8 +44,8 @@ import System.Clock
 ## What this Library offers
 
 This is a small library providing a way to use mutable
-references as auto-implicit arguments in pure code, using
-a linear token bound via a parameter to the mutable references
+references in pure code, using
+a linear token to which the mutable references are bound via a parameter
 to make sure all mutable state stays confined within the boundaries
 of a pure computation.
 
@@ -64,6 +66,19 @@ fibo n =
         A r1 t2 := ref1 (S Z) t1
         v #  t3 := read1 r1 (forN n (nextFibo r1 r2) t2)
      in v # (release r1 (release r2 t3))
+```
+
+Or, with some syntactic sugar sprinkled on top:
+
+```idris
+fibo2 : Nat -> Nat
+fibo2 n =
+  allocRun1 [ref1 1, ref1 1] $ \[r1,r2] => Syntax.do
+     forN n (nextFibo r1 r2)
+     v <- read1 r1
+     release r1
+     release r2
+     pure v
 ```
 
 The techniques described in more detail below can also be used with
@@ -719,11 +734,6 @@ main = do
   printLn (wordCount "hello world!\nhow are you?")
   printLn (wordCount2 "hello world!\nhow are you?")
 ```
-
-That's quite a bit more concise. We used qualified `do` notation, because
-`F1 s` is not a proper monad. Note, however, that this second version of `wordCount`,
-generates quite a bit more code that's also significantly slower, so avoid doing
-this in performance-critical parts of your code.
 
 <!-- vi: filetype=idris2:syntax=markdown
 -->
