@@ -11,16 +11,16 @@ import Profile
 
 %default total
 
-pairLet : Ref1 () s Nat => a -> F1 s (Nat,a)
-pairLet x t =
-  let n # t2 := read1 t
-      t3     := write1 (S n) t2
+pairLet : (r : Ref1 Nat) -> a -> F1 [r] (Nat,a)
+pairLet r x t =
+  let n # t2 := read1 r t
+      t3     := write1 r (S n) t2
    in (n,x) # t3
 
-pairSugar : Ref1 () s Nat => a -> F1 s (Nat,a)
-pairSugar v = Syntax.do
-  n <- read1
-  write1 (S n)
+pairSugar : (r : Ref1 Nat) -> a -> F1 [r] (Nat,a)
+pairSugar r v = Syntax.do
+  n <- read1 r
+  write1 r (S n)
   pure (n,v)
 
 pairState : a -> State Nat (Nat,a)
@@ -40,10 +40,10 @@ zipWithIndexRec = go [<] 0
     go sp n (x::xs) = go (sp :< (n,x)) (S n) xs
 
 zipWithIndexLet : List a -> List (Nat,a)
-zipWithIndexLet xs = withRef1 0 $ traverse1 pairLet xs
+zipWithIndexLet xs = withRef1 0 $ \r => traverse1 (pairLet r) xs
 
 zipWithIndexSugar : List a -> List (Nat,a)
-zipWithIndexSugar xs = withRef1 0 $ traverse1 pairSugar xs
+zipWithIndexSugar xs = withRef1 0 $ \r => traverse1 (pairSugar r) xs
 
 zipWithIndexState : List a -> List (Nat,a)
 zipWithIndexState = evalState 0 . traverse pairState
