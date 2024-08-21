@@ -13,9 +13,9 @@ import Profile
 
 pairLet : (r : Ref1 Nat) -> a -> F1 [r] (Nat,a)
 pairLet r x t =
-  let n # t2 := read1 r t
-      t3     := write1 r (S n) t2
-   in (n,x) # t3
+  let n # t := read1 r t
+      _ # t := write1 r (S n) t
+   in (n,x) # t
 
 pairSugar : (r : Ref1 Nat) -> a -> F1 [r] (Nat,a)
 pairSugar r v = Syntax.do

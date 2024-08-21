@@ -15,7 +15,7 @@ export %inline
 
 export %inline
 (>>) : {0 rs,ss,ts : _} -> C1' rs ss -> C1 ss ts b -> C1 rs ts b
-(>>) f g t = let t2 := f t in g t2
+(>>) f g t = let _ # t := f t in g t
 
 export %inline
 (<*>) : {0 rs,ss,ts : _} -> C1 rs ss (a -> b) -> C1 ss ts a -> C1 rs ts b
@@ -51,12 +51,12 @@ data Allocs : (ts : List Type)  -> Type where
 ||| Allocates several resources and binds them to a linear token
 ||| in one go.
 export
-allocAll : All Alloc ts -> (1 t : T1 []) -> Allocs ts
+allocAll : All Alloc xs -> (1 t : T1 []) -> Allocs xs
 allocAll []      t = AS [] t
 allocAll (f::fs) t =
-  let AS vs t2 := allocAll fs t
-      A  v  t3 := f t2
-   in AS (v::vs) t3
+  let AS {ts} vs t := allocAll fs t
+      A  v       t := f {rs = RS vs} t
+   in AS (v::vs) t
 
 ||| Like `run1`, but for linear computations that work with several
 ||| bound resources at the same time.

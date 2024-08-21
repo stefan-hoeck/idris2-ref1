@@ -48,11 +48,9 @@ Drop (s :: rs) (RT x) = s :: Drop rs x
 ||| `run1` must work with function argument `f` of type
 ||| `(1 t : T1 []) -> R1 [] a`, that is, any resources required must
 ||| be allocated and released within `f`.
-export
-data T1 : (rs : Resources) -> Type where
-  T : AnyPtr -> T1 rs
-
-%name T1 t,t1,t2,t3
+export %noinline %tcinline
+0 T1 : (rs : Resources) -> Type
+T1 rs = %World
 
 ||| The result of a stateful linear computation.
 |||
@@ -76,7 +74,7 @@ mapR1 f (v # t) = f v # t
 ||| released.
 public export
 0 C1' : (rs,ss : Resources) -> Type
-C1' rs ss = T1 rs -@ T1 ss
+C1' rs ss = T1 rs -@ R1 ss ()
 
 ||| Convenience alias for `C1' rs rs`.
 public export
@@ -105,19 +103,21 @@ F1 rs = C1 rs rs
 ||| the result value must have quantity omega (see the definition of `R1`).
 export %noinline
 run1 : F1 [] a -> a
-run1 f = let v # T _ := f (believe_me $ the Bits8 0) in v
+run1 f = let v # _ := f %MkWorld in v
 
 ||| Run the given stateful computation if the boolean value is `True`.
 export
 when1 : Bool -> Lazy (F1' rs) -> F1' rs
 when1 True  f t = f t
-when1 False _ t = t
+when1 False _ t = () # t
 
 ||| Run a stateful computation `n` times
 export
 forN : Nat -> F1' rs -> F1' rs
-forN 0     f t = t
-forN (S k) f t = forN k f (f t)
+forN 0     f t = () # t
+forN (S k) f t =
+  let _ # t := f t
+   in forN k f t
 
 --------------------------------------------------------------------------------
 -- FFI
@@ -135,9 +135,9 @@ forN (S k) f t = forN k f (f t)
 ||| that can then be accessed via the updated linear token.
 ||| See `Data.Linear.Ref1.prim__newRef` and the corresponding
 ||| `Data.Linear.Ref1.ref1` for a usage example.
-export %inline
+export
 unsafeBind : (1 t : T1 rs) -> T1 (r::rs)
-unsafeBind (T p) = T p
+unsafeBind w = w
 
 ||| Release a resource from the token it was bound to.
 |||
@@ -161,8 +161,8 @@ unsafeBind (T p) = T p
 ||| new linear token, it is safe to do this without copying the
 ||| mutable array!
 export %inline
-unsafeRelease : (0 p : Res r rs) -> (1 t : T1 rs) -> T1 (Drop rs p)
-unsafeRelease _ (T t) = T t
+unsafeRelease : (0 p : Res r rs) -> C1' rs (Drop rs p)
+unsafeRelease _ w = () # w
 
 ||| Use this to convert a primitive FFI call to a linear function
 ||| of type `F1' rs`.
@@ -172,5 +172,5 @@ unsafeRelease _ (T t) = T t
 ||| See `Data.Linear.Ref1.prim__writeRef` and
 ||| the corresponding `Data.Linear.Ref1.write1` for a usage example.
 export %inline
-ffi : (prim : (1 p : AnyPtr) -> AnyPtr) -> F1' rs
-ffi prim (T t) = T (prim t)
+ffi : PrimIO () -> F1' rs
+ffi prim w = let MkIORes _ w := prim w in () # w
