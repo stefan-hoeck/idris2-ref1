@@ -4,10 +4,11 @@ import Control.Monad.Identity
 import Control.Monad.State
 import Control.Monad.ST
 import Data.Linear.Ref1
-import Data.Linear.Token.Syntax
 import Data.Linear.Traverse1
 import Data.List
 import Profile
+
+import Syntax.T1
 
 %default total
 
@@ -18,7 +19,7 @@ pairLet r x t =
    in (n,x) # t
 
 pairSugar : (r : Ref1 Nat) -> a -> F1 [r] (Nat,a)
-pairSugar r v = Syntax.do
+pairSugar r v = T1.do
   n <- read1 r
   write1 r (S n)
   pure (n,v)
@@ -38,6 +39,16 @@ zipWithIndexRec = go [<] 0
     go : SnocList (Nat,a) -> Nat -> List a -> List (Nat,a)
     go sp n []      = sp <>> []
     go sp n (x::xs) = go (sp :< (n,x)) (S n) xs
+
+zipWithIndexSyn : List a -> List (Nat,a)
+zipWithIndexSyn xs = withRef1 0 (go [<] xs)
+  where
+    go : SnocList (Nat,a) -> List a -> WithRef1 Nat (List (Nat,a))
+    go sx []        r = pure (sx <>> [])
+    go sx (x :: xs) r = T1.do
+      p <- pairSugar r x
+      go (sx :< p) xs r
+
 
 zipWithIndexLet : List a -> List (Nat,a)
 zipWithIndexLet xs = withRef1 0 $ \r => traverse1 (pairLet r) xs
@@ -70,6 +81,11 @@ bench = Group "ref1"
       [ Single "1"       (basic zipWithIndexSugar $ list 1)
       , Single "1000"    (basic zipWithIndexSugar $ list 1000)
       , Single "1000000" (basic zipWithIndexSugar $ list 1000000)
+      ]
+  , Group "zipWithIndex syn"
+      [ Single "1"       (basic zipWithIndexSyn $ list 1)
+      , Single "1000"    (basic zipWithIndexSyn $ list 1000)
+      , Single "1000000" (basic zipWithIndexSyn $ list 1000000)
       ]
   , Group "zipWithIndex State"
       [ Single "1"       (basic zipWithIndexState $ list 1)

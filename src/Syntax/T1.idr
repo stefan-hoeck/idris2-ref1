@@ -1,4 +1,4 @@
-module Data.Linear.Token.Syntax
+module Syntax.T1
 
 import public Data.List.Quantifiers
 import public Data.Linear.Token
