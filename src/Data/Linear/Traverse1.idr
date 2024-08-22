@@ -32,7 +32,7 @@ Foldable1 Maybe where
   foldMap1 f Nothing  t = neutral # t
   foldMap1 f (Just x) t = f x t
 
-  traverse1_ f Nothing  t = t
+  traverse1_ f Nothing  t = () # t
   traverse1_ f (Just v) t = f v t
 
 export
@@ -46,7 +46,7 @@ Foldable1 (Either e) where
   foldMap1 f (Left _)  t = neutral # t
   foldMap1 f (Right x) t = f x t
 
-  traverse1_ f (Left _)  t = t
+  traverse1_ f (Left _)  t = ()# t
   traverse1_ f (Right v) t = f v t
 
 -- List and SnocList
@@ -87,13 +87,13 @@ foldMap1SnocList f = go neutral
 
 export
 traverse1_List : (a -> F1' s) -> List a -> F1' s
-traverse1_List f []        t = t
-traverse1_List f (x :: xs) t = traverse1_List f xs (f x t)
+traverse1_List f []        t = () # t
+traverse1_List f (x :: xs) t = let _ # t := f x t in traverse1_List f xs t
 
 export
 traverse1_SnocList : (a -> F1' s) -> SnocList a -> F1' s
-traverse1_SnocList f [<]       t = t
-traverse1_SnocList f (sx :< x) t = traverse1_SnocList f sx (f x t)
+traverse1_SnocList f [<]       t = () # t
+traverse1_SnocList f (sx :< x) t = let _ # t := f x t in traverse1_SnocList f sx t
 
 export %inline
 Foldable1 List where
@@ -132,8 +132,8 @@ foldMap1Vect f = go neutral
 
 export
 traverse1_Vect : (a -> F1' s) -> Vect n a -> F1' s
-traverse1_Vect f []        t = t
-traverse1_Vect f (x :: xs) t = traverse1_Vect f xs (f x t)
+traverse1_Vect f []        t = () # t
+traverse1_Vect f (x :: xs) t = let _ # t := f x t in traverse1_Vect f xs t
 
 export %inline
 Foldable1 (Vect n) where

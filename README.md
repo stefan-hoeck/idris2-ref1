@@ -32,10 +32,11 @@ import Control.Monad.State
 import Control.Monad.ST
 import Data.IORef
 import Data.Linear.Ref1
-import Data.Linear.Token.Syntax
 import Data.Linear.Traverse1
 import Derive.Prelude
 import System.Clock
+
+import Syntax.T1
 
 %default total
 %language ElabReflection
@@ -54,18 +55,22 @@ tail-recursion in a much simpler way):
 
 ```idris
 nextFibo : (r1,r2 : Ref1 Nat) -> F1' [r1,r2]
-nextFibo r1 r2 t0 =
-  let f1 # t1 := read1 r1 t0
-      f2 # t2 := read1 r2 t1
-   in write1 r1 f2 (write1 r2 (f1+f2) t2)
+nextFibo r1 r2 t =
+  let f1 # t := read1 r1 t
+      f2 # t := read1 r2 t
+      _  # t := write1 r2 (f1+f2) t
+   in write1 r1 f2 t
 
 fibo : Nat -> Nat
 fibo n =
-  run1 $ \t0 =>
-    let A r2 t1 := ref1 (S Z) t0
-        A r1 t2 := ref1 (S Z) t1
-        v #  t3 := read1 r1 (forN n (nextFibo r1 r2) t2)
-     in v # (release r1 (release r2 t3))
+  run1 $ \t =>
+    let A r2 t := ref1 (S Z) t
+        A r1 t := ref1 (S Z) t
+        _ #  t := forN n (nextFibo r1 r2) t
+        v #  t := read1 r1 t
+        _ #  t := release r1 t
+        _ #  t := release r2 t
+     in v # t
 ```
 
 Or, with some syntactic sugar sprinkled on top:
@@ -73,7 +78,7 @@ Or, with some syntactic sugar sprinkled on top:
 ```idris
 fibo2 : Nat -> Nat
 fibo2 n =
-  allocRun1 [ref1 1, ref1 1] $ \[r1,r2] => Syntax.do
+  allocRun1 [ref1 1, ref1 1] $ \[r1,r2] => T1.do
      forN n (nextFibo r1 r2)
      v <- read1 r1
      release r1
@@ -580,9 +585,10 @@ zipping the values in a list with their index:
 
 ```idris
 pairWithIndex1 : (r : Ref1 Nat) -> a -> (1 t : T1 [r]) -> R1 [r] (Nat,a)
-pairWithIndex1 r v t1 =
-  let n # t2 := read1 r t1
-   in (n,v) # write1 r (S n) t2
+pairWithIndex1 r v t =
+  let n # t := read1 r t
+      _ # t := write1 r (S n) t
+   in (n,v) # t
 
 zipWithIndex1 : Traversable1 f => f a -> f (Nat,a)
 zipWithIndex1 as = withRef1 0 $ \r => traverse1 (pairWithIndex1 r) as
@@ -652,13 +658,20 @@ inc : (r : Ref1 Nat) -> (0 p : Res r rs) => F1' rs
 inc r = mod1 r S
 
 endWord : (b : Ref1 Bool) -> (w : Ref1 Nat) -> F1' [c,w,l,b]
-endWord b w t = write1 b False (whenRef1 b (inc w) t)
+endWord b w t =
+  let _ # t := whenRef1 b (inc w) t
+   in write1 b False t
 
 processChar : (c,w,l : Ref1 Nat) -> (b : Ref1 Bool) -> Char -> F1' [c,w,l,b]
 processChar c w l b x t =
   case isAlpha x of
-    True  => inc c (write1 b True t)
-    False => inc c $ endWord b w $ when1 (x == '\n') (inc l) t
+    True  =>
+      let _ # t := write1 b True t
+       in inc c t
+    False =>
+      let _ # t := when1 (x == '\n') (inc l) t
+          _ # t := endWord b w t
+       in inc c t
 ```
 
 The actual `wordCount` function has to setup all mutable variables,
@@ -682,19 +695,20 @@ wordCount s  =
         A l t  := ref1 (S Z) t
         A w t  := ref1 Z t
         A c t  := ref1 Z t
-        t      := traverse1_ (processChar c w l b) (unpack s) t
-        t      := endWord b w t
+        _ # t  := traverse1_ (processChar c w l b) (unpack s) t
+        _ # t  := endWord b w t
         x  # t := readAndRelease c t
         y  # t := readAndRelease w t
         z  # t := readAndRelease l t
-     in WC x y z # release b t
+        _  # t := release b t
+     in WC x y z # t
 ```
 
 This last step is quite verbose. This is to be expected: Just like in
 imperative languages, we have to introduce mutable variables before
 we can use them. It is also a bit tedious that we have to manually
 thread our linear token through the whole computation. There is
-some `do` and applicative notation available from `Data.Linear.Token.Syntax`,
+some `do` and applicative notation available from `Syntax.T1`,
 but it does not yet work with resource allocation. However, there is
 also utility function `allocRun1`, which allows us to allocate
 all resources from a heterogeneous list in one go.
@@ -704,11 +718,14 @@ Here's the word count example with some syntactic sugar:
 wordCount2 : String -> WordCount
 wordCount2 "" = WC 0 0 0
 wordCount2 s  =
-  allocRun1 [ref1 0,ref1 0,ref1 1,ref1 False] $ \[c,w,l,b] => Syntax.do
+  allocRun1 [ref1 0,ref1 0,ref1 1,ref1 False] $ \[c,w,l,b] => T1.do
     traverse1_ (processChar c w l b) (unpack s)
     endWord b w
     release b
-    [| WC (readAndRelease c) (readAndRelease w) (readAndRelease l) |]
+    x <- readAndRelease c
+    y <- readAndRelease w
+    z <- readAndRelease l
+    pure $ WC x y z
 ```
 
 Even though syntax is not yet perfect,
