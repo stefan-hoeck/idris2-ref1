@@ -9,20 +9,23 @@ export %inline
 pure : a -> F1 s a
 pure = (#)
 
+io_bind : {0 rs,ss,ts : _} -> C1 rs ss a -> (a -> C1 ss ts b) -> C1 rs ts b
+io_bind f g t1 = let v # t2 := f t1 in g v t2
+
 export %inline
 (>>=) : {0 rs,ss,ts : _} -> C1 rs ss a -> (a -> C1 ss ts b) -> C1 rs ts b
-(>>=) f g t1 = let v # t2 := f t1 in g v t2
+(>>=) = io_bind
 
 export %inline
 (>>) : {0 rs,ss,ts : _} -> C1' rs ss -> C1 ss ts b -> C1 rs ts b
-(>>) f g t = let _ # t := f t in g t
+(>>) f g = io_bind f (\_ => g)
 
 export %inline
 (<*>) : {0 rs,ss,ts : _} -> C1 rs ss (a -> b) -> C1 ss ts a -> C1 rs ts b
-(<*>) f g t =
-  let fn # t2 := f t
-      v  # t3 := g t2
-   in fn v # t3
+(<*>) f g = T1.do
+  fn <- f
+  v  <- g
+  pure (fn v)
 
 --------------------------------------------------------------------------------
 -- Allocating many resources

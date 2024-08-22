@@ -135,7 +135,7 @@ forN (S k) f t =
 ||| that can then be accessed via the updated linear token.
 ||| See `Data.Linear.Ref1.prim__newRef` and the corresponding
 ||| `Data.Linear.Ref1.ref1` for a usage example.
-export
+export %inline
 unsafeBind : (1 t : T1 rs) -> T1 (r::rs)
 unsafeBind w = w
 

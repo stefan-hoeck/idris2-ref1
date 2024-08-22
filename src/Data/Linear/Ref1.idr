@@ -76,7 +76,7 @@ whenRef1 r f t = let b # t1 := read1 r t in when1 b f t1
 ||| Releases a mutable reference.
 |||
 ||| It will no longer be accessible through the given linear token.
-export %noinline
+export %inline
 release : (r : Ref1 a) -> (0 p : Res r rs) => C1' rs (Drop rs p)
 release r t = unsafeRelease p t
 
@@ -84,10 +84,7 @@ release r t = unsafeRelease p t
 |||
 ||| It will no longer be accessible through the given linear token.
 export %inline
-readAndRelease :
-     (r : Ref1 a)
-  -> {auto 0 p : Res r rs}
-  -> C1 rs (Drop rs p) a
+readAndRelease : (r : Ref1 a) -> (0 p : Res r rs) => C1 rs (Drop rs p) a
 readAndRelease r t =
   let v # t := read1 r t
       _ # t := release r t
