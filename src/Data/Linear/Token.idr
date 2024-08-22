@@ -165,12 +165,12 @@ unsafeRelease : (0 p : Res r rs) -> C1' rs (Drop rs p)
 unsafeRelease _ w = () # w
 
 ||| Use this to convert a primitive FFI call to a linear function
-||| of type `F1' rs`.
+||| of type `F1 rs a`.
 |||
 ||| This is typically used for running effectful computations that
 ||| do not produce an interesting result.
 ||| See `Data.Linear.Ref1.prim__writeRef` and
 ||| the corresponding `Data.Linear.Ref1.write1` for a usage example.
 export %inline
-ffi : PrimIO () -> F1' rs
-ffi prim w = let MkIORes _ w := prim w in () # w
+ffi : PrimIO a -> F1 rs a
+ffi prim w = let MkIORes v w := prim w in v # w

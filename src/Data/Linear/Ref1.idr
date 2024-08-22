@@ -10,19 +10,11 @@ import public Data.Linear.Token
 
 -- Implemented externally
 -- e.g., in Scheme, passed around as a box
-data Mut : Type where [external]
+data Mut : Type -> Type where [external]
 
-export %foreign "scheme:(lambda (x) (box x))"
-                "javascript:lambda:(x) => ({value : x})"
-prim__newRef   : AnyPtr -> Mut
-
-export %foreign "scheme:(lambda (x) (unbox x))"
-                "javascript:lambda:(x) => x.value"
-prim__readRef  : Mut -> AnyPtr
-
-export %foreign "scheme:(lambda (x v) (set-box! x v))"
-                "javascript:lambda:(x,v,t) => {x.value = v}"
-prim__writeRef : Mut -> (val : AnyPtr) -> PrimIO ()
+%extern prim__newIORef : forall a . a -> (1 x : %World) -> IORes (Mut a)
+%extern prim__readIORef : forall a . Mut a -> (1 x : %World) -> IORes a
+%extern prim__writeIORef : forall a . Mut a -> (1 val : a) -> (1 x : %World) -> IORes ()
 
 --------------------------------------------------------------------------------
 -- Ref1: A linearily mutable reference
@@ -31,7 +23,7 @@ prim__writeRef : Mut -> (val : AnyPtr) -> PrimIO ()
 ||| A linear mutable reference
 export
 data Ref1 : (a : Type) -> Type where
-  R1 : (mut : Mut) -> Ref1 a
+  R1 : (mut : Mut a) -> Ref1 a
 
 --------------------------------------------------------------------------------
 -- utilities
@@ -41,17 +33,17 @@ data Ref1 : (a : Type) -> Type where
 ||| initial value `v`.
 export %inline
 ref1 : (v : a) -> (1 t : T1 rs) -> A1 rs (Ref1 a)
-ref1 v t = A (R1 $ prim__newRef $ believe_me v) (unsafeBind t)
+ref1 v t = let m # t := ffi (prim__newIORef v) t in A (R1 m) (unsafeBind t)
 
 ||| Reads the current value at a mutable reference tagged with `tag`.
 export %inline
 read1 : (r : Ref1 a) -> (0 p : Res r rs) => F1 rs a
-read1 (R1 m) t = believe_me (prim__readRef m) # t
+read1 (R1 m) = ffi (prim__readIORef m)
 
 ||| Updates the mutable reference tagged with `tag`.
 export %inline
 write1 : (r : Ref1 a) -> (0 p : Res r rs) => (val : a) -> F1' rs
-write1 (R1 m) val = ffi (prim__writeRef m (believe_me val))
+write1 (R1 m) val = ffi (prim__writeIORef m val)
 
 ||| Modifies the value stored in mutable reference tagged with `tag`.
 export %inline

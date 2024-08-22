@@ -32,10 +32,11 @@ import Control.Monad.State
 import Control.Monad.ST
 import Data.IORef
 import Data.Linear.Ref1
-import Data.Linear.Token.Syntax
 import Data.Linear.Traverse1
 import Derive.Prelude
 import System.Clock
+
+import Syntax.T1
 
 %default total
 %language ElabReflection
@@ -77,7 +78,7 @@ Or, with some syntactic sugar sprinkled on top:
 ```idris
 fibo2 : Nat -> Nat
 fibo2 n =
-  allocRun1 [ref1 1, ref1 1] $ \[r1,r2] => Syntax.do
+  allocRun1 [ref1 1, ref1 1] $ \[r1,r2] => T1.do
      forN n (nextFibo r1 r2)
      v <- read1 r1
      release r1
@@ -707,7 +708,7 @@ This last step is quite verbose. This is to be expected: Just like in
 imperative languages, we have to introduce mutable variables before
 we can use them. It is also a bit tedious that we have to manually
 thread our linear token through the whole computation. There is
-some `do` and applicative notation available from `Data.Linear.Token.Syntax`,
+some `do` and applicative notation available from `Syntax.T1`,
 but it does not yet work with resource allocation. However, there is
 also utility function `allocRun1`, which allows us to allocate
 all resources from a heterogeneous list in one go.
@@ -717,11 +718,14 @@ Here's the word count example with some syntactic sugar:
 wordCount2 : String -> WordCount
 wordCount2 "" = WC 0 0 0
 wordCount2 s  =
-  allocRun1 [ref1 0,ref1 0,ref1 1,ref1 False] $ \[c,w,l,b] => Syntax.do
+  allocRun1 [ref1 0,ref1 0,ref1 1,ref1 False] $ \[c,w,l,b] => T1.do
     traverse1_ (processChar c w l b) (unpack s)
     endWord b w
     release b
-    [| WC (readAndRelease c) (readAndRelease w) (readAndRelease l) |]
+    x <- readAndRelease c
+    y <- readAndRelease w
+    z <- readAndRelease l
+    pure $ WC x y z
 ```
 
 Even though syntax is not yet perfect,
