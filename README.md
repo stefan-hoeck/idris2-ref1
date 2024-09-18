@@ -756,12 +756,12 @@ main = do
 
 While we now have a clean way for using local, mutable state in pure
 computations, we have to ask ourselves once more: What about `IO`?
-Can we use our fast, linear function not only in pure computations
+Can we use our fast, linear functions not only in pure computations
 but also with mutable data structures that live in `IO`? Only then
-would we be able to reuse all the algorithms involving mutable state
-both in pure functions as well as in effectful ones.
+will we be able to reuse all the algorithms involving mutable state
+both in pure as well as in effectful code.
 
-Ideally, the following statements would hold:
+Ideally, the following statements must hold:
 
 * Mutable state living in `IO` cannot safely be used in pure computations,
   so we must never ever inadvertently cross the boundary between `IO` land
@@ -770,8 +770,8 @@ Ideally, the following statements would hold:
   code as well as in `IO`, where we'd like to pass mutable structures
   coming - for instance - from the FFI (foreign function interface) to
   functions of type `F1 rs a` and evaluate the result - again in `IO`.
-* Mutable state is all about performance: We will accept regression in
-  terms of performance to make this possible.
+* Mutable state is all about performance: We will not accept regressions in
+  terms of performance to make the above possible.
 
 Fortunately, there is a way to do all of this. There is as special type of
 `Resources` that is reserved for mutable state living in `IO` land:
@@ -792,8 +792,8 @@ incPure r = incAgain r
 ```
 
 First, we redefine `inc` with a more general type (function `incAgain`).
-What we see here, is that the function now takes an argument of type
-`Ref t Nat`. This our actual type for mutable references, and `t` is
+What we see here is that the function now takes an argument of type
+`Ref t Nat`. This is our actual type for mutable references, and `t` is
 a tag than can either be `RPure`, or `RIO`. `Ref1` is then just an alias
 for `Ref RPure`, and `IORef` is an alias for `Ref RIO`.
 
