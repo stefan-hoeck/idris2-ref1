@@ -30,7 +30,7 @@ module README
 
 import Control.Monad.State
 import Control.Monad.ST
-import Data.IORef
+import Data.IORef as R
 import Data.Linear.Ref1
 import Data.Linear.Traverse1
 import Derive.Prelude
@@ -134,12 +134,12 @@ transparent (don't do this!):
 ```idris
 -- create a new mutable reference outside of `IO`:
 -- don't do this!
-mkRef : Nat -> IORef Nat
+mkRef : Nat -> R.IORef Nat
 mkRef = unsafePerformIO . newIORef
 
 -- read and write to a mutable reference outside
 -- of `IO`: don't do this!
-callAndSum : IORef Nat -> Nat -> Nat
+callAndSum : R.IORef Nat -> Nat -> Nat
 callAndSum ref n =
   unsafePerformIO $ modifyIORef ref (+n) >> readIORef ref
 
@@ -750,6 +750,115 @@ main : IO ()
 main = do
   printLn (wordCount "hello world!\nhow are you?")
   printLn (wordCount2 "hello world!\nhow are you?")
+```
+
+## Back to `IO`
+
+While we now have a clean way for using local, mutable state in pure
+computations, we have to ask ourselves once more: What about `IO`?
+Can we use our fast, linear functions not only in pure computations
+but also with mutable data structures that live in `IO`? Only then
+will we be able to reuse all the algorithms involving mutable state
+both in pure as well as in effectful code.
+
+Ideally, the following statements must hold:
+
+* Mutable state living in `IO` cannot safely be used in pure computations,
+  so we must never ever inadvertently cross the boundary between `IO` land
+  and pure code.
+* We'd like to reuse our algorithms involving mutable state both in pure
+  code as well as in `IO`, where we'd like to pass mutable structures
+  coming - for instance - from the FFI (foreign function interface) to
+  functions of type `F1 rs a` and evaluate the result - again in `IO`.
+* Mutable state is all about performance: We will not accept regressions in
+  terms of performance to make the above possible.
+
+Fortunately, there is a way to do all of this. There is as special type of
+`Resources` that is reserved for mutable state living in `IO` land:
+`[World]`. In addition, there is an interface - `InIO` - that allows
+us to tag a type so that the compiler knows it belong to `IO`.
+
+Here's some example code demonstrating the concept:
+
+```idris
+incAgain : (r : Ref t Nat) -> (0 p : Res r rs) => F1' rs
+incAgain r = mod1 r S
+
+incIO : Ref1.IORef Nat -> F1' [World]
+incIO r = incAgain r
+
+incPure : (r : Ref1 Nat) -> F1' [r]
+incPure r = incAgain r
+```
+
+First, we redefine `inc` with a more general type (function `incAgain`).
+What we see here is that the function now takes an argument of type
+`Ref t Nat`. This is our actual type for mutable references, and `t` is
+a tag than can either be `RPure`, or `RIO`. `Ref1` is then just an alias
+for `Ref RPure`, and `IORef` is an alias for `Ref RIO`.
+
+The other two functions demonstrate, that `incAgain` can be safely used
+both with an `IORef` as well as with a `Ref1`. Internally, the two are
+exactly the same and the generated code is also exactly the same, so
+`incAgain` could be some arbitrarily complex linear computation involving
+mutable state.
+
+We require two more ingredients to make this all work out. First,
+we must make sure that upon creation, a mutable reference either
+explicitly belongs to `IO` (functions `refIO` and `newIORef`) or to
+pure computations (function `ref1`). Second, we need a way to
+run functions of type `F1 [World] a`, and running such functions
+should be an `IO` action. That's what utilities `primRun` and `runIO`
+are used for.
+
+Below is a complete example demonstrating all of this
+by going back to computing Fibonacci numbers:
+
+```idris
+parameters (r1, r2 : Ref t Nat)
+           {auto 0 p1 : Res r1 rs}
+           {auto 0 p2 : Res r2 rs}
+
+  nextFibo' : F1' rs
+  nextFibo' = T1.do
+    f1 <- read1 r1
+    f2 <- read1 r2
+    write1 r2 (f1+f2)
+    write1 r1 f2
+
+  fibo' : Nat -> F1 rs Nat
+  fibo' n = T1.do
+    write1 r1 1
+    write1 r2 1
+    forN n nextFibo'
+    read1 r1
+```
+
+By allocating two mutable references in `IO` land, we can safely
+use `fibo'` from within `IO`:
+
+```idris
+fiboIO : Nat -> IO Nat
+fiboIO n = do
+  r1 <- Ref1.newIORef Z
+  r2 <- Ref1.newIORef Z
+  runIO (fibo' r1 r2 n)
+```
+
+Likewise, by allocating two mutable linear references and
+binding them to a linear token, we can safely use `fibo'`
+in a pure computation:
+
+```idris
+fiboPure : Nat -> Nat
+fiboPure n =
+  run1 $ \t =>
+    let A r2 t := ref1 Z t
+        A r1 t := ref1 Z t
+        v #  t := fibo' r1 r2 n t
+        _ #  t := release r1 t
+        _ #  t := release r2 t
+     in v # t
 ```
 
 <!-- vi: filetype=idris2:syntax=markdown

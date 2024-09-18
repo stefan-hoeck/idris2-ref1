@@ -22,8 +22,21 @@ data Mut : Type -> Type where [external]
 
 ||| A linear mutable reference
 export
-data Ref1 : (a : Type) -> Type where
-  R1 : (mut : Mut a) -> Ref1 a
+data Ref : RTag -> (a : Type) -> Type where
+  R1 : (mut : Mut a) -> Ref t a
+
+||| Alias for `Ref RPure`
+public export
+0 Ref1 : Type -> Type
+Ref1 = Ref RPure
+
+||| Alias for `Ref RIO`
+public export
+0 IORef : Type -> Type
+IORef = Ref RIO
+
+public export
+InIO (Ref RIO a) where
 
 --------------------------------------------------------------------------------
 -- utilities
@@ -35,25 +48,36 @@ export %inline
 ref1 : (v : a) -> (1 t : T1 rs) -> A1 rs (Ref1 a)
 ref1 v t = let m # t := ffi (prim__newIORef v) t in A (R1 m) (unsafeBind t)
 
+||| Creates a mutable reference in `IO` land.
+export %inline
+refIO : (v : a) -> F1 [World] (IORef a)
+refIO v t = let m # t := ffi (prim__newIORef v) t in R1 m # t
+
+||| Creates a mutable reference in `IO` land.
+export %inline
+newIORef : HasIO io => (v : a) -> io (IORef a)
+newIORef v =
+  primIO $ \w => let MkIORes m w := prim__newIORef v w in MkIORes (R1 m) w
+
 ||| Reads the current value at a mutable reference tagged with `tag`.
 export %inline
-read1 : (r : Ref1 a) -> (0 p : Res r rs) => F1 rs a
+read1 : (r : Ref t a) -> (0 p : Res r rs) => F1 rs a
 read1 (R1 m) = ffi (prim__readIORef m)
 
 ||| Updates the mutable reference tagged with `tag`.
 export %inline
-write1 : (r : Ref1 a) -> (0 p : Res r rs) => (val : a) -> F1' rs
+write1 : (r : Ref t a) -> (0 p : Res r rs) => (val : a) -> F1' rs
 write1 (R1 m) val = ffi (prim__writeIORef m val)
 
 ||| Modifies the value stored in mutable reference tagged with `tag`.
 export %inline
-mod1 : (r : Ref1 a) -> (0 p : Res r rs) => (f : a -> a) -> F1' rs
+mod1 : (r : Ref t a) -> (0 p : Res r rs) => (f : a -> a) -> F1' rs
 mod1 r f t = let v # t2 := read1 r t in write1 r (f v) t2
 
 ||| Modifies the value stored in mutable reference tagged with `tag`
 ||| and returns the updated value.
 export
-modAndRead1 : (r : Ref1 a) -> (0 p : Res r rs) => (f : a -> a) -> F1 rs a
+modAndRead1 : (r : Ref t a) -> (0 p : Res r rs) => (f : a -> a) -> F1 rs a
 modAndRead1 r f t =
   let _ # t := mod1 r f t
    in read1 r t
@@ -61,7 +85,7 @@ modAndRead1 r f t =
 ||| Modifies the value stored in mutable reference tagged with `tag`
 ||| and returns the previous value.
 export
-readAndMod1 : (r : Ref1 a) -> (0 p : Res r rs) => (f : a -> a) -> F1 rs a
+readAndMod1 : (r : Ref t a) -> (0 p : Res r rs) => (f : a -> a) -> F1 rs a
 readAndMod1 r f t =
   let v # t := read1 r t
       _ # t := write1 r (f v) t
@@ -70,7 +94,7 @@ readAndMod1 r f t =
 ||| Runs the given stateful computation only when given boolean flag
 ||| is currently at `True`
 export
-whenRef1 : (r : Ref1 Bool) -> (0 p : Res r rs) => Lazy (F1' rs) -> F1' rs
+whenRef1 : (r : Ref t Bool) -> (0 p : Res r rs) => Lazy (F1' rs) -> F1' rs
 whenRef1 r f t = let b # t1 := read1 r t in when1 b f t1
 
 ||| Releases a mutable reference.
