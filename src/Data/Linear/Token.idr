@@ -8,12 +8,41 @@ import public Data.Linear
 -- Resources
 --------------------------------------------------------------------------------
 
+||| A tag for marking resources that can be used both in `IO` or in pure
+||| computations.
+public export
+data RTag = RPure | RIO
+
+||| A tag for linear computation that should be run in `IO`
+public export
+data World : Type where
+
+||| Interface for tagging types that should be evaluated in
+||| `IO` land.
+public export
+interface InIO a where
+
 ||| A list of arbitrary managed resources.
 |||
 ||| This is used as parameter for the linear token `T1`
 ||| provided by this library. The idea is that only resources
 ||| bound to the linear token can be used in the current linear
 ||| context.
+|||
+||| We distinguish between two cases: Values that belong to `IO` land
+||| (i.e. mutable references and arrays coming from and being sent
+||| to the FFI), and values that should be created (and, possibly, release)
+||| in pure computations.
+|||
+||| For the former types of values, `Resources` should be equal to `[World]`,
+||| and the corresponding types should implement interface `InIO`. These
+||| values can be freely used in linear computations involving a linear
+||| token of type `T1 [World] a`, but running these computations is an `IO`
+||| action.
+|||
+||| For the latter type of values (those being used in pure computations),
+||| `T1 rs a` should be used, where `rs` is a list of linear resources bound
+||| to the linear token.
 public export
 data Resources : Type where
   Nil  : Resources
@@ -24,12 +53,14 @@ public export
 data Res : (r : t) -> (rs : Resources) -> Type where
   RH : Res r (r::rs)
   RT : Res r rs -> Res r (s::rs)
+  RW : {0 t : Type} -> {0 r : t} -> InIO t => Res r [World]
 
 ||| Removes resource `r` from the list of managed resources `rs`.
 public export
 0 Drop : (rs : Resources) -> Res r rs -> Resources
 Drop (r :: rs) RH     = rs
 Drop (s :: rs) (RT x) = s :: Drop rs x
+Drop [World]   RW     = [World]
 
 --------------------------------------------------------------------------------
 -- T1
@@ -104,6 +135,17 @@ F1 rs = C1 rs rs
 export %noinline
 run1 : F1 [] a -> a
 run1 f = let v # _ := f %MkWorld in v
+
+||| Runs a linear computation tagged with `[World]` as a primitive
+||| `IO` action.
+export %inline
+primRun : F1 [World] a -> PrimIO a
+primRun f w = let v # w := f w in MkIORes v w
+
+||| Convenience wrapper around `primRun`.
+export %inline
+runIO : HasIO io => F1 [World] a -> io a
+runIO f = primIO $ primRun f
 
 ||| Run the given stateful computation if the boolean value is `True`.
 export
