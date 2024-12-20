@@ -10,12 +10,20 @@ pure : a -> F1 s a
 pure = (#)
 
 export %inline
-(>>=) : {0 rs,ss,ts : _} -> C1 rs ss a -> (a -> C1 ss ts b) -> C1 rs ts b
+(>>=) :
+     (T1 rs -@ Res1 a f)
+  -> ((v : a) -> T1 (f v) -@ Res1 b g)
+  -> T1 rs
+  -@ Res1 b g
 (>>=) f g t1 = let v # t2 := f t1 in g v t2
 
 export %inline
-(>>) : {0 rs,ss,ts : _} -> C1' rs ss -> C1 ss ts b -> C1 rs ts b
-(>>) f g = T1.(>>=) f (\_ => g)
+(>>) :
+     (T1 rs -@ Res1 () f)
+  -> (T1 (f ()) -@ Res1 b g)
+  -> T1 rs
+  -@ Res1 b g
+(>>) f g = T1.(>>=) f (\(),t => g t)
 
 export %inline
 (<*>) : {0 rs,ss,ts : _} -> C1 rs ss (a -> b) -> C1 ss ts a -> C1 rs ts b
