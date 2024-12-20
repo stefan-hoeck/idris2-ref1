@@ -64,13 +64,13 @@ nextFibo r1 r2 t =
 fibo : Nat -> Nat
 fibo n =
   run1 $ \t =>
-    let A r2 t := ref1 (S Z) t
-        A r1 t := ref1 (S Z) t
-        _ #  t := forN n (nextFibo r1 r2) t
-        v #  t := read1 r1 t
-        _ #  t := release r1 t
-        _ #  t := release r2 t
-     in v # t
+    let r2 # t := ref1 (S Z) t
+        r1 # t := ref1 (S Z) t
+        _  # t := forN n (nextFibo r1 r2) t
+        v  # t := read1 r1 t
+        _  # t := release r1 t
+        _  # t := release r2 t
+     in v  # t
 ```
 
 Or, with some syntactic sugar sprinkled on top:
@@ -691,16 +691,16 @@ wordCount : String -> WordCount
 wordCount "" = WC 0 0 0
 wordCount s  =
   run1 $ \t =>
-    let A b t  := ref1 False t
-        A l t  := ref1 (S Z) t
-        A w t  := ref1 Z t
-        A c t  := ref1 Z t
-        _ # t  := traverse1_ (processChar c w l b) (unpack s) t
-        _ # t  := endWord b w t
-        x  # t := readAndRelease c t
-        y  # t := readAndRelease w t
-        z  # t := readAndRelease l t
-        _  # t := release b t
+    let b # t := ref1 False t
+        l # t := ref1 (S Z) t
+        w # t := ref1 Z t
+        c # t := ref1 Z t
+        _ # t := traverse1_ (processChar c w l b) (unpack s) t
+        _ # t := endWord b w t
+        x # t := readAndRelease c t
+        y # t := readAndRelease w t
+        z # t := readAndRelease l t
+        _ # t := release b t
      in WC x y z # t
 ```
 
@@ -853,12 +853,12 @@ in a pure computation:
 fiboPure : Nat -> Nat
 fiboPure n =
   run1 $ \t =>
-    let A r2 t := ref1 Z t
-        A r1 t := ref1 Z t
-        v #  t := fibo' r1 r2 n t
-        _ #  t := release r1 t
-        _ #  t := release r2 t
-     in v # t
+    let r2 # t := ref1 Z t
+        r1 # t := ref1 Z t
+        v  # t := fibo' r1 r2 n t
+        _  # t := release r1 t
+        _  # t := release r2 t
+     in v  # t
 ```
 
 <!-- vi: filetype=idris2:syntax=markdown

@@ -46,7 +46,7 @@ InIO (Ref RIO a) where
 ||| initial value `v`.
 export %inline
 ref1 : (v : a) -> (1 t : T1 rs) -> A1 rs (Ref1 a)
-ref1 v t = let m # t := ffi (prim__newIORef v) t in A (R1 m) (unsafeBind t)
+ref1 v t = let m # t := ffi (prim__newIORef v) t in R1 m # unsafeBind t
 
 ||| Creates a mutable reference in `IO` land.
 export %inline
@@ -129,7 +129,7 @@ export
 withRef1 : a -> WithRef1 a b -> b
 withRef1 v f =
   run1 $ \t =>
-    let A r t := ref1 v t
+    let r # t := ref1 v t
         v # t := f r t
         _ # t := release r t
      in v # t
