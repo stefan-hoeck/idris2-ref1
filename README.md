@@ -482,7 +482,7 @@ Haskell's [Lazy Functional State Threads](https://www.microsoft.com/en-us/resear
 which offers safe encapsulation of mutable state
 in pure, referentially transparent computations.
 
-The key idea to parameterize the `ST` monad
+The key idea is to parameterize the `ST` monad
 over a phantom type `s` (a type parameter with no runtime
 relevance): `ST s a`. Mutable arrays and references are
 then parameterized by the same phantom type `s`, so
@@ -707,10 +707,9 @@ wordCount s  =
 This last step is quite verbose. This is to be expected: Just like in
 imperative languages, we have to introduce mutable variables before
 we can use them. It is also a bit tedious that we have to manually
-thread our linear token through the whole computation. There is
-some `do` and applicative notation available from `Syntax.T1`,
-but it does not yet work with resource allocation. However, there is
-also utility function `allocRun1`, which allows us to allocate
+thread our linear token through the whole computation. However, there is
+some `do` and applicative notation available from `Syntax.T1`.
+There is also utility function `allocRun1`, which allows us to allocate
 all resources from a heterogeneous list in one go.
 Here's the word count example with some syntactic sugar:
 
@@ -728,7 +727,7 @@ wordCount2 s  =
     pure $ WC x y z
 ```
 
-Even though syntax is not yet perfect,
+Even though syntax might not yet be perfect,
 we gain a lot from all of this: Fast, mutable state localised
 to pure computations together with safe resource management.
 To understand this, look at the type of `run1`:
@@ -852,13 +851,13 @@ in a pure computation:
 ```idris
 fiboPure : Nat -> Nat
 fiboPure n =
-  run1 $ \t =>
-    let r2 # t := ref1 Z t
-        r1 # t := ref1 Z t
-        v  # t := fibo' r1 r2 n t
-        _  # t := release r1 t
-        _  # t := release r2 t
-     in v  # t
+  run1 $ T1.do
+    r2 <- ref1 Z
+    r1 <- ref1 Z
+    v  <- fibo' r1 r2 n
+    release r1
+    release r2
+    pure v
 ```
 
 <!-- vi: filetype=idris2:syntax=markdown
