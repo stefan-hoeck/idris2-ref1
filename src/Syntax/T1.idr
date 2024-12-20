@@ -10,12 +10,20 @@ pure : a -> F1 s a
 pure = (#)
 
 export %inline
-(>>=) : {0 rs,ss,ts : _} -> C1 rs ss a -> (a -> C1 ss ts b) -> C1 rs ts b
+(>>=) :
+     (T1 rs -@ Res1 a f)
+  -> ((v : a) -> T1 (f v) -@ Res1 b g)
+  -> T1 rs
+  -@ Res1 b g
 (>>=) f g t1 = let v # t2 := f t1 in g v t2
 
 export %inline
-(>>) : {0 rs,ss,ts : _} -> C1' rs ss -> C1 ss ts b -> C1 rs ts b
-(>>) f g = T1.(>>=) f (\_ => g)
+(>>) :
+     (T1 rs -@ Res1 () f)
+  -> (T1 (f ()) -@ Res1 b g)
+  -> T1 rs
+  -@ Res1 b g
+(>>) f g = T1.(>>=) f (\(),t => g t)
 
 export %inline
 (<*>) : {0 rs,ss,ts : _} -> C1 rs ss (a -> b) -> C1 ss ts a -> C1 rs ts b
@@ -45,18 +53,18 @@ RS (h::t) = h :: RS t
 ||| This pairs as heterogeneous list of resources of types `ts`
 ||| with a linear token parameterized by those resources.
 public export
-data Allocs : (ts : List Type)  -> Type where
-  AS : {0 ts : _} -> (vs : HList ts) -> (1 t : T1 (RS vs)) -> Allocs ts
+0 Allocs : (ts : List Type) -> Type
+Allocs ts = Res1 (HList ts) RS
 
 ||| Allocates several resources and binds them to a linear token
 ||| in one go.
 export
 allocAll : All Alloc xs -> (1 t : T1 []) -> Allocs xs
-allocAll []      t = AS [] t
+allocAll []      t = [] # t
 allocAll (f::fs) t =
-  let AS {ts} vs t := allocAll fs t
-      A  v       t := f {rs = RS vs} t
-   in AS (v::vs) t
+  let vs # t := allocAll fs t
+      v  # t := f {rs = RS vs} t
+   in (v::vs) # t
 
 ||| Like `run1`, but for linear computations that work with several
 ||| bound resources at the same time.
@@ -65,4 +73,4 @@ allocRun1 :
      All Alloc ts
   -> ((vs : HList ts) -> (1 t : T1 (RS vs)) -> R1 [] a)
   -> a
-allocRun1 as f = run1 $ \t => let AS vs t := allocAll as t in f vs t
+allocRun1 as f = run1 $ \t => let vs # t := allocAll as t in f vs t

@@ -87,13 +87,16 @@ T1 rs = %World
 |||
 ||| It pairs the result value with a new linear token.
 public export
-data R1 : (rs : Resources) -> (a : Type) ->  Type where
-  (#) : (v : a) -> (1 tok : T1 rs) -> R1 rs a
+data Res1 : (a : Type) -> (f : a -> Resources) ->  Type where
+  (#) : (v : a) -> (1 tok : T1 (f v)) -> Res1 a f
 
-||| The result of allocating a linear resource
 public export
-data A1 : (rs : Resources) -> (a : Type) ->  Type where
-  A : (v : a) -> (1 tok : T1 (v::rs)) -> A1 rs a
+0 R1 : Resources -> Type -> Type
+R1 rs a = Res1 a (const rs)
+
+public export
+0 A1 : Resources -> Type -> Type
+A1 rs a = Res1 a (::rs)
 
 ||| `R1` is a functor, but since `map` does not have the correct
 ||| quantities, this is what we use instead.
