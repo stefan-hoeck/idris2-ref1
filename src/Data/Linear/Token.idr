@@ -150,6 +150,16 @@ export %inline
 runIO : HasIO io => F1 [World] a -> io a
 runIO f = primIO $ primRun f
 
+||| Safely uses a primitive `IO` action in `F1 [World]`.
+export %inline
+toF1 : PrimIO a -> F1 [World] a
+toF1 f w = let MkIORes v w := f w in v # w
+
+||| Safely uses an `IO` action in `F1 [World]`.
+export %inline
+ioToF1 : IO a -> F1 [World] a
+ioToF1 io = toF1 (toPrim io)
+
 ||| Run the given stateful computation if the boolean value is `True`.
 export
 when1 : Bool -> Lazy (F1' rs) -> F1' rs
