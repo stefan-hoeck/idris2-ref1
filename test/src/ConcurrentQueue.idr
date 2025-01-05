@@ -46,18 +46,18 @@ prog Unsafe m ref = runIO (forN ITER $ inc ref DELAY)
 prog CAS    m ref = runIO (forN ITER $ casinc ref DELAY)
 prog Mut    m ref = mutinc m ref ITER DELAY
 
-toProg : List String -> (Prog,Nat)
-toProg [_,"CAS",   n] = (CAS, cast n)
-toProg [_,"mut",   n] = (Mut, cast n)
-toProg [_,"unsafe",n] = (Unsafe, cast n)
-toProg _              = (Unsafe, 4)
+runProg : Prog -> Nat -> IO (List Nat)
+runProg prg n = do
+  mut <- makeMutex
+  ref <- newIORef (ST 0 empty)
+  ts  <- sequence $ V.replicate n (fork $ prog prg mut ref)
+  traverse_ (\t => threadWait t) ts
+  toList . queue <$> runIO (read1 ref)
 
 main : IO ()
 main = do
-  (prg,n) <- toProg <$> getArgs
-  mut     <- makeMutex
-  ref     <- newIORef (ST 0 empty)
-  ts      <- sequence $ V.replicate n (fork $ prog prg mut ref)
-  traverse_ (\t => threadWait t) ts
-  ST n q  <- runIO (read1 ref)
-  printLn (length $ toList q)
+  us <- runProg Unsafe 4
+  cs <- runProg CAS 4
+  when (length us >= length cs) (die "no race condition")
+  when (cs /= [0 .. pred (4 * ITER)]) (die "CAS synchronization failed")
+  putStrLn "Concurrent queue succeeded!"

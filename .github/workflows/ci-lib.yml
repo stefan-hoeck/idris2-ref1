@@ -33,3 +33,7 @@ jobs:
         run: pack test ref1
       - name: Test lib Node
         run: pack --cg node test ref1
+      - name: Test concurrent counter
+        run: pack exec test/src/Concurrent.idr
+      - name: Test concurrent queue
+        run: pack exec test/src/ConcurrentQueue.idr
