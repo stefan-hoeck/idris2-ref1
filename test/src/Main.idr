@@ -36,11 +36,17 @@ prop_readandmod1 =
     [x,y] <- forAll $ hlist [anyBits8, anyBits8]
     x === withRef1 x (\r => readAndMod1 r (+y))
 
+prop_casupdate1 : Property
+prop_casupdate1 =
+  property $ do
+    [x,y] <- forAll $ hlist [anyBits8, anyBits8]
+    x === withRef1 x (\r => casupdate1 r (\v => (v+y,v)))
+
 prop_casmod1 : Property
 prop_casmod1 =
   property $ do
     [x,y] <- forAll $ hlist [anyBits8, anyBits8]
-    x === withRef1 x (\r => casmod1 r (\v => (v+y,v)))
+    (x+y) === withRef1 x (\r,t => let _ # t := casmod1 r (+y) t in read1 r t)
 
 props : Group
 props =
@@ -50,6 +56,7 @@ props =
     , ("prop_mod1", prop_mod1)
     , ("prop_modandread1", prop_modandread1)
     , ("prop_readandmod1", prop_readandmod1)
+    , ("prop_casupdate1", prop_casupdate1)
     , ("prop_casmod1", prop_casmod1)
     ]
 

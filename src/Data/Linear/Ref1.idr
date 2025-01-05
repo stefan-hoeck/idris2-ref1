@@ -76,6 +76,10 @@ write1 (R1 m) val = ffi (prim__writeIORef m val)
 
 ||| Atomically writes `val` to the mutable reference if its current
 ||| value is equal to `pre`.
+|||
+||| This is supported and has been tested on the Chez and Racket backends.
+||| It trivially works on the JavaScript backends, which are single-threaded
+||| anyway.
 export %inline
 caswrite1 : (r : Ref t a) -> (0 p : Res r rs) => (pre,val : a) -> F1 rs Bool
 caswrite1 (R1 m) pre val t =
@@ -83,11 +87,15 @@ caswrite1 (R1 m) pre val t =
     0 => False # t
     _ => True # t
 
-||| Thread-safe modification of a mutable reference using a CAS-loop
+||| Atomic modification of a mutable reference using a CAS-loop
 ||| internally
+|||
+||| This is supported and has been tested on the Chez and Racket backends.
+||| It trivially works on the JavaScript backends, which are single-threaded
+||| anyway.
 export
-casmod1 : (r : Ref t a) -> (a -> (a,b)) -> (0 p : Res r rs) => F1 rs b
-casmod1 r f t = assert_total (loop t)
+casupdate1 : (r : Ref t a) -> (a -> (a,b)) -> (0 p : Res r rs) => F1 rs b
+casupdate1 r f t = assert_total (loop t)
   where
     covering loop : F1 rs b
     loop t =
@@ -95,6 +103,22 @@ casmod1 r f t = assert_total (loop t)
           (new,v)  := f cur
           True # t := caswrite1 r cur new t | _ # t => loop t
        in v # t
+
+||| Atomic modification of a mutable reference using a CAS-loop
+||| internally
+|||
+||| This is supported and has been tested on the Chez and Racket backends.
+||| It trivially works on the JavaScript backends, which are single-threaded
+||| anyway.
+export
+casmod1 : (r : Ref t a) -> (a -> a) -> (0 p : Res r rs) => F1' rs
+casmod1 r f t = assert_total (loop t)
+  where
+    covering loop : F1' rs
+    loop t =
+      let cur  # t := read1 r t
+          True # t := caswrite1 r cur (f cur) t | _ # t => loop t
+       in () # t
 
 ||| Modifies the value stored in mutable reference tagged with `tag`.
 export %inline
