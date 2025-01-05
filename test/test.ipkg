@@ -1,0 +1,13 @@
+package ref1-test
+version = 0.1.0
+authors = "stefan-hoeck"
+
+depends = base >= 0.7.0
+        , ref1
+        , hedgehog
+
+sourcedir = "src"
+
+main = Main
+
+executable = "ref1-test"
