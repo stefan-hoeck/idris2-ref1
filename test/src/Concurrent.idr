@@ -8,7 +8,7 @@ import System
 %default total
 
 ITER : Nat
-ITER = 10_000_000
+ITER = 1_000_000
 
 data Prog = Unsafe | CAS | Mut
 
