@@ -1,5 +1,6 @@
 module Concurrent
 
+import Data.Vect as V
 import Data.Linear.Ref1
 import System.Concurrency
 import System
@@ -30,23 +31,18 @@ prog Unsafe m ref = runIO (forN ITER $ inc ref)
 prog CAS    m ref = runIO (forN ITER $ casinc ref)
 prog Mut    m ref = mutinc m ref ITER
 
-toProg : List String -> Prog
-toProg [_,"CAS"] = CAS
-toProg [_,"Mut"] = Mut
-toProg _         = Unsafe
+toProg : List String -> (Prog,Nat)
+toProg [_,"CAS",   n] = (CAS, cast n)
+toProg [_,"mut",   n] = (Mut, cast n)
+toProg [_,"unsafe",n] = (Unsafe, cast n)
+toProg _              = (Unsafe, 4)
 
 main : IO ()
 main = do
-  prg <- toProg <$> getArgs
-  mut <- makeMutex
-  ref <- newIORef Z
-  t1  <- fork (prog prg mut ref)
-  t2  <- fork (prog prg mut ref)
-  t3  <- fork (prog prg mut ref)
-  t4  <- fork (prog prg mut ref)
-  threadWait t1
-  threadWait t2
-  threadWait t3
-  threadWait t4
-  n <- runIO (read1 ref)
+  (prg,n) <- toProg <$> getArgs
+  mut     <- makeMutex
+  ref     <- newIORef Z
+  ts      <- sequence $ V.replicate n (fork $ prog prg mut ref)
+  traverse_ (\t => threadWait t) ts
+  n       <- runIO (read1 ref)
   printLn n
