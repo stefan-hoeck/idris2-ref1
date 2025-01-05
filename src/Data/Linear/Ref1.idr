@@ -16,6 +16,11 @@ data Mut : Type -> Type where [external]
 %extern prim__readIORef : forall a . Mut a -> (1 x : %World) -> IORes a
 %extern prim__writeIORef : forall a . Mut a -> (1 val : a) -> (1 x : %World) -> IORes ()
 
+
+%foreign "scheme:(lambda (a x v w) (if (box-cas! x v w) 1 0))"
+         "javascript:lambda:(a,x,v,w) => {x.value = w; return 1;}"
+prim__casWrite : Mut a -> (prev,val : a) -> Bits8
+
 --------------------------------------------------------------------------------
 -- Ref1: A linearily mutable reference
 --------------------------------------------------------------------------------
@@ -68,6 +73,52 @@ read1 (R1 m) = ffi (prim__readIORef m)
 export %inline
 write1 : (r : Ref t a) -> (0 p : Res r rs) => (val : a) -> F1' rs
 write1 (R1 m) val = ffi (prim__writeIORef m val)
+
+||| Atomically writes `val` to the mutable reference if its current
+||| value is equal to `pre`.
+|||
+||| This is supported and has been tested on the Chez and Racket backends.
+||| It trivially works on the JavaScript backends, which are single-threaded
+||| anyway.
+export %inline
+caswrite1 : (r : Ref t a) -> (0 p : Res r rs) => (pre,val : a) -> F1 rs Bool
+caswrite1 (R1 m) pre val t =
+  case prim__casWrite m pre val of
+    0 => False # t
+    _ => True # t
+
+||| Atomic modification of a mutable reference using a CAS-loop
+||| internally
+|||
+||| This is supported and has been tested on the Chez and Racket backends.
+||| It trivially works on the JavaScript backends, which are single-threaded
+||| anyway.
+export
+casupdate1 : (r : Ref t a) -> (a -> (a,b)) -> (0 p : Res r rs) => F1 rs b
+casupdate1 r f t = assert_total (loop t)
+  where
+    covering loop : F1 rs b
+    loop t =
+      let cur # t  := read1 r t
+          (new,v)  := f cur
+          True # t := caswrite1 r cur new t | _ # t => loop t
+       in v # t
+
+||| Atomic modification of a mutable reference using a CAS-loop
+||| internally
+|||
+||| This is supported and has been tested on the Chez and Racket backends.
+||| It trivially works on the JavaScript backends, which are single-threaded
+||| anyway.
+export
+casmod1 : (r : Ref t a) -> (a -> a) -> (0 p : Res r rs) => F1' rs
+casmod1 r f t = assert_total (loop t)
+  where
+    covering loop : F1' rs
+    loop t =
+      let cur  # t := read1 r t
+          True # t := caswrite1 r cur (f cur) t | _ # t => loop t
+       in () # t
 
 ||| Modifies the value stored in mutable reference tagged with `tag`.
 export %inline

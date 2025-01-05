@@ -27,5 +27,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install --yes nodejs
       - name: Build lib
         run: pack install ref1
+      - name: Test lib Chez
+        run: pack test ref1
+      - name: Test lib Node
+        run: pack --cg node test ref1
+      - name: Test concurrent counter
+        run: pack exec test/src/Concurrent.idr
+      - name: Test concurrent queue
+        run: pack exec test/src/ConcurrentQueue.idr
