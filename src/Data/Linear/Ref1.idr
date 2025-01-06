@@ -18,7 +18,7 @@ data Mut : Type -> Type where [external]
 
 
 %foreign "scheme:(lambda (a x v w) (if (box-cas! x v w) 1 0))"
-         "javascript:lambda:(a,x,v,w) => {x.value = w; return 1;}"
+         "javascript:lambda:(a,x,v,w) => {if (x.value === v) {x.value = w; return 1;} else {return 0;}}"
 prim__casWrite : Mut a -> (prev,val : a) -> Bits8
 
 --------------------------------------------------------------------------------
