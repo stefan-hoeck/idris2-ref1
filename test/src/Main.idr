@@ -36,6 +36,28 @@ prop_readandmod1 =
     [x,y] <- forAll $ hlist [anyBits8, anyBits8]
     x === withRef1 x (\r => readAndMod1 r (+y))
 
+casWriteGet :
+     (r : Ref t a)
+  -> (pre,new : a)
+  -> {auto 0 p : Res r rs}
+  -> F1 rs (Bool,a)
+casWriteGet r pre new t =
+  let b # t := caswrite1 r pre new t
+      v # t := read1 r t
+   in (b,v) # t
+
+prop_caswrite1 : Property
+prop_caswrite1 =
+  property $ do
+    [x,y] <- forAll $ hlist [anyBits8, anyBits8]
+    (True,y) === withRef1 x (\r => casWriteGet r x y)
+
+prop_caswrite_diff : Property
+prop_caswrite_diff =
+  property $ do
+    [x,y] <- forAll $ hlist [anyBits8, anyBits8]
+    (False,x) === withRef1 x (\r => casWriteGet r (x+1) y)
+
 prop_casupdate1 : Property
 prop_casupdate1 =
   property $ do
@@ -58,6 +80,8 @@ props =
     , ("prop_readandmod1", prop_readandmod1)
     , ("prop_casupdate1", prop_casupdate1)
     , ("prop_casmod1", prop_casmod1)
+    , ("prop_caswrite1", prop_caswrite1)
+    , ("prop_caswrite_diff", prop_caswrite_diff)
     ]
 
 main : IO ()
