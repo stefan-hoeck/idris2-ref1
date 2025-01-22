@@ -69,10 +69,22 @@ export %inline
 read1 : (r : Ref t a) -> (0 p : Res r rs) => F1 rs a
 read1 (R1 m) = ffi (prim__readIORef m)
 
+||| Convenience alias for `runIO $ read1 r` for reading a reference in
+||| `IO`.
+export %inline
+readref : HasIO io => IORef a -> io a
+readref r = runIO $ read1 r
+
 ||| Updates the mutable reference tagged with `tag`.
 export %inline
 write1 : (r : Ref t a) -> (0 p : Res r rs) => (val : a) -> F1' rs
 write1 (R1 m) val = ffi (prim__writeIORef m val)
+
+||| Convenience alias for `runIO $ write1 r v` for writing to a reference in
+||| `IO`.
+export %inline
+writeref : HasIO io => IORef a -> a -> io ()
+writeref r v = runIO $ write1 r v
 
 ||| Atomically writes `val` to the mutable reference if its current
 ||| value is equal to `pre`.
@@ -104,6 +116,13 @@ casupdate1 r f t = assert_total (loop t)
           True # t := caswrite1 r cur new t | _ # t => loop t
        in v # t
 
+||| Atomically updates and reads a mutable reference in `IO`.
+|||
+||| This uses `casupdate1` internally.
+export %inline
+update : HasIO io => IORef a -> (a -> (a,b)) -> io b
+update r v = runIO $ casupdate1 r v
+
 ||| Atomic modification of a mutable reference using a CAS-loop
 ||| internally
 |||
@@ -124,6 +143,13 @@ casmod1 r f t = assert_total (loop t)
 export %inline
 mod1 : (r : Ref t a) -> (0 p : Res r rs) => (f : a -> a) -> F1' rs
 mod1 r f t = let v # t2 := read1 r t in write1 r (f v) t2
+
+||| Atomically modifies a mutable reference in `IO`.
+|||
+||| This uses `casmod1` internally.
+export %inline
+mod : HasIO io => IORef a -> (a -> a) -> io ()
+mod r f = runIO $ casmod1 r f
 
 ||| Modifies the value stored in mutable reference tagged with `tag`
 ||| and returns the updated value.
