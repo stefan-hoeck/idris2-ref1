@@ -24,11 +24,11 @@ DELAY = 100_000
 
 data Prog = Unsafe | CAS | Mut
 
-inc : (r : IORef State) -> Nat -> F1' [World]
+inc : (r : Ref s State) -> Nat -> F1' s
 inc r 0     = mod1 r next
 inc r (S k) = inc r k
 
-casinc : (r : IORef State) -> Nat -> F1' [World]
+casinc : (r : Ref s State) -> Nat -> F1' s
 casinc r 0     = casmod1 r next
 casinc r (S k) = casinc r k
 

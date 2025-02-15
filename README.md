@@ -54,7 +54,7 @@ An example (that could of course also be written with plain
 tail-recursion in a much simpler way):
 
 ```idris
-nextFibo : (r1,r2 : Ref1 Nat) -> F1' [r1,r2]
+nextFibo : (r1,r2 : Ref s Nat) -> F1' s
 nextFibo r1 r2 t =
   let f1 # t := read1 r1 t
       f2 # t := read1 r2 t
@@ -64,13 +64,10 @@ nextFibo r1 r2 t =
 fibo : Nat -> Nat
 fibo n =
   run1 $ \t =>
-    let r2 # t := ref1 (S Z) t
-        r1 # t := ref1 (S Z) t
+    let r2 # t := ref (S Z) t
+        r1 # t := ref (S Z) t
         _  # t := forN n (nextFibo r1 r2) t
-        v  # t := read1 r1 t
-        _  # t := release r1 t
-        _  # t := release r2 t
-     in v  # t
+     in read1 r1 t
 ```
 
 Or, with some syntactic sugar sprinkled on top:
@@ -78,12 +75,11 @@ Or, with some syntactic sugar sprinkled on top:
 ```idris
 fibo2 : Nat -> Nat
 fibo2 n =
-  allocRun1 [ref1 1, ref1 1] $ \[r1,r2] => T1.do
+  run1 $ T1.do
+     r1 <- ref (S Z)
+     r2 <- ref (S Z)
      forN n (nextFibo r1 r2)
-     v <- read1 r1
-     release r1
-     release r2
-     pure v
+     read1 r1
 ```
 
 The techniques described in more detail below can also be used with
@@ -545,7 +541,7 @@ typed reference:
 record ExRef a where
   constructor ER
   {0 state : Type}
-  ref : STRef state a
+  stref : STRef state a
 
 leak3 : ExRef Nat
 leak3 = runST (ER <$> newSTRef 1)
@@ -584,7 +580,7 @@ resembles the raw let bindings of `PrimIO`. Here's the example for
 zipping the values in a list with their index:
 
 ```idris
-pairWithIndex1 : (r : Ref1 Nat) -> a -> (1 t : T1 [r]) -> R1 [r] (Nat,a)
+pairWithIndex1 : (r : Ref s Nat) -> a -> (1 t : T1 s) -> R1 s (Nat,a)
 pairWithIndex1 r v t =
   let n # t := read1 r t
       _ # t := write1 r (S n) t
@@ -654,15 +650,15 @@ So, these are functions that potentially mutate some state but
 do not produce any other results of interest.
 
 ```idris
-inc : (r : Ref1 Nat) -> (0 p : Res r rs) => F1' rs
+inc : (r : Ref s Nat) -> F1' s
 inc r = mod1 r S
 
-endWord : (b : Ref1 Bool) -> (w : Ref1 Nat) -> F1' [c,w,l,b]
+endWord : Ref s Bool -> Ref s Nat -> F1' s
 endWord b w t =
   let _ # t := whenRef1 b (inc w) t
    in write1 b False t
 
-processChar : (c,w,l : Ref1 Nat) -> (b : Ref1 Bool) -> Char -> F1' [c,w,l,b]
+processChar : (c,w,l : Ref s Nat) -> (b : Ref s Bool) -> Char -> F1' s
 processChar c w l b x t =
   case isAlpha x of
     True  =>
@@ -691,16 +687,15 @@ wordCount : String -> WordCount
 wordCount "" = WC 0 0 0
 wordCount s  =
   run1 $ \t =>
-    let b # t := ref1 False t
-        l # t := ref1 (S Z) t
-        w # t := ref1 Z t
-        c # t := ref1 Z t
+    let b # t := ref False t
+        l # t := ref (S Z) t
+        w # t := ref Z t
+        c # t := ref Z t
         _ # t := traverse1_ (processChar c w l b) (unpack s) t
         _ # t := endWord b w t
-        x # t := readAndRelease c t
-        y # t := readAndRelease w t
-        z # t := readAndRelease l t
-        _ # t := release b t
+        x # t := read1 c t
+        y # t := read1 w t
+        z # t := read1 l t
      in WC x y z # t
 ```
 
@@ -717,14 +712,14 @@ Here's the word count example with some syntactic sugar:
 wordCount2 : String -> WordCount
 wordCount2 "" = WC 0 0 0
 wordCount2 s  =
-  allocRun1 [ref1 0,ref1 0,ref1 1,ref1 False] $ \[c,w,l,b] => T1.do
+  run1 $ T1.do
+    c <- ref 0
+    w <- ref 0
+    l <- ref 0
+    b <- ref False
     traverse1_ (processChar c w l b) (unpack s)
     endWord b w
-    release b
-    x <- readAndRelease c
-    y <- readAndRelease w
-    z <- readAndRelease l
-    pure $ WC x y z
+    T1.[| WC (read1 c) (read1 w) (read1 l) |]
 ```
 
 Even though syntax might not yet be perfect,
@@ -780,13 +775,13 @@ us to tag a type so that the compiler knows it belong to `IO`.
 Here's some example code demonstrating the concept:
 
 ```idris
-incAgain : (r : Ref t Nat) -> (0 p : Res r rs) => F1' rs
+incAgain : (r : Ref s Nat) -> F1' s
 incAgain r = mod1 r S
 
-incIO : Ref1.IORef Nat -> F1' [World]
+incIO : Ref1.IORef Nat -> F1' World
 incIO r = incAgain r
 
-incPure : (r : Ref1 Nat) -> F1' [r]
+incPure : (r : Ref s Nat) -> F1' s
 incPure r = incAgain r
 ```
 
@@ -814,18 +809,16 @@ Below is a complete example demonstrating all of this
 by going back to computing Fibonacci numbers:
 
 ```idris
-parameters (r1, r2 : Ref t Nat)
-           {auto 0 p1 : Res r1 rs}
-           {auto 0 p2 : Res r2 rs}
+parameters (r1, r2 : Ref s Nat)
 
-  nextFibo' : F1' rs
+  nextFibo' : F1' s
   nextFibo' = T1.do
     f1 <- read1 r1
     f2 <- read1 r2
     write1 r2 (f1+f2)
     write1 r1 f2
 
-  fibo' : Nat -> F1 rs Nat
+  fibo' : Nat -> F1 s Nat
   fibo' n = T1.do
     write1 r1 1
     write1 r2 1
@@ -852,12 +845,9 @@ in a pure computation:
 fiboPure : Nat -> Nat
 fiboPure n =
   run1 $ T1.do
-    r2 <- ref1 Z
-    r1 <- ref1 Z
-    v  <- fibo' r1 r2 n
-    release r1
-    release r2
-    pure v
+    r2 <- ref Z
+    r1 <- ref Z
+    fibo' r1 r2 n
 ```
 
 <!-- vi: filetype=idris2:syntax=markdown
