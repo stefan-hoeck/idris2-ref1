@@ -221,7 +221,7 @@ Traversable1 List1 where
 -- Utilities
 --------------------------------------------------------------------------------
 
-pairIx : (r : Ref1 Nat) -> a -> F1 [r] (Nat,a)
+pairIx : (r : Ref s Nat) -> a -> F1 s (Nat,a)
 pairIx r v t = mapR1 (,v) (readAndMod1 r S t)
 
 ||| Pairs each value in a data structure with its index of appearance.

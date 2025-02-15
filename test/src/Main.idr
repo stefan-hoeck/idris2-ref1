@@ -36,11 +36,7 @@ prop_readandmod1 =
     [x,y] <- forAll $ hlist [anyBits8, anyBits8]
     x === withRef1 x (\r => readAndMod1 r (+y))
 
-casWriteGet :
-     (r : Ref t a)
-  -> (pre,new : a)
-  -> {auto 0 p : Res r rs}
-  -> F1 rs (Bool,a)
+casWriteGet : (r : Ref s a) -> (pre,new : a) -> F1 s (Bool,a)
 casWriteGet r pre new t =
   let b # t := caswrite1 r pre new t
       v # t := read1 r t
