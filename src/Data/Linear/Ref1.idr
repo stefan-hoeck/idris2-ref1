@@ -42,13 +42,20 @@ IORef = Ref World
 ||| Creates a new mutable reference tagged with `tag` and holding
 ||| initial value `v`.
 export %inline
-ref : (v : a) -> F1 s (Ref s a)
-ref v t = let m # t := ffi (prim__newIORef v) t in R1 m # t
+ref1 : (v : a) -> F1 s (Ref s a)
+ref1 v t = let m # t := ffi (prim__newIORef v) t in R1 m # t
+
+|||
+export %inline
+newref : Lift1 s f => (v : a) -> f (Ref s a)
+newref = lift1 . ref1
 
 ||| Creates a mutable reference in `IO` land.
-export %inline
+|||
+||| Deprecated: Use `newref` instead
+export %inline %deprecate
 newIORef : HasIO io => (v : a) -> io (IORef a)
-newIORef v = runIO (ref v)
+newIORef v = runIO (ref1 v)
 
 ||| Reads the current value at a mutable reference tagged with `tag`.
 export %inline
@@ -58,8 +65,8 @@ read1 (R1 m) = ffi (prim__readIORef m)
 ||| Convenience alias for `runIO $ read1 r` for reading a reference in
 ||| `IO`.
 export %inline
-readref : HasIO io => IORef a -> io a
-readref r = runIO $ read1 r
+readref : Lift1 s f => Ref s a -> f a
+readref = lift1 . read1
 
 ||| Updates the mutable reference tagged with `tag`.
 export %inline
@@ -69,8 +76,8 @@ write1 (R1 m) val = ffi (prim__writeIORef m val)
 ||| Convenience alias for `runIO $ write1 r v` for writing to a reference in
 ||| `IO`.
 export %inline
-writeref : HasIO io => IORef a -> a -> io ()
-writeref r v = runIO $ write1 r v
+writeref : Lift1 s f => Ref s a -> a -> f ()
+writeref r = lift1 . write1 r
 
 ||| Atomically writes `val` to the mutable reference if its current
 ||| value is equal to `pre`.
@@ -106,8 +113,8 @@ casupdate1 r f t = assert_total (loop t)
 |||
 ||| This uses `casupdate1` internally.
 export %inline
-update : HasIO io => IORef a -> (a -> (a,b)) -> io b
-update r v = runIO $ casupdate1 r v
+update : Lift1 s f => Ref s a -> (a -> (a,b)) -> f b
+update r = lift1 . casupdate1 r
 
 ||| Atomic modification of a mutable reference using a CAS-loop
 ||| internally
@@ -134,8 +141,8 @@ mod1 r f t = let v # t2 := read1 r t in write1 r (f v) t2
 |||
 ||| This uses `casmod1` internally.
 export %inline
-mod : HasIO io => IORef a -> (a -> a) -> io ()
-mod r f = runIO $ casmod1 r f
+mod : Lift1 s f => Ref s a -> (a -> a) -> f ()
+mod r = lift1 . casmod1 r
 
 ||| Modifies the value stored in mutable reference tagged with `tag`
 ||| and returns the updated value.
@@ -173,4 +180,4 @@ WithRef1 a b = forall s . (r : Ref s a) -> F1 s b
 ||| Runs a function requiring a linear mutable reference.
 export
 withRef1 : a -> WithRef1 a b -> b
-withRef1 v f = run1 $ \t => let r # t := ref v t in f r t
+withRef1 v f = run1 $ \t => let r # t := ref1 v t in f r t

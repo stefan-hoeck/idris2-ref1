@@ -115,3 +115,21 @@ forN (S k) f t =
 export %inline
 ffi : PrimIO a -> F1 s a
 ffi prim w = let MkIORes v w := prim w in v # w
+
+--------------------------------------------------------------------------------
+-- Lift1
+--------------------------------------------------------------------------------
+
+
+||| An interface for wrapping linear computations in a monadic context.
+|||
+||| This allows us to deal with pure as well as effectful computations.
+||| Effectful computations should use `World` as the tag for `s`, while
+||| pure computations should use universal quantification.
+public export
+interface Monad f => Lift1 (0 s : Type) (0 f : Type -> Type) | f where
+  lift1 : F1 s a -> f a
+
+export %inline
+Lift1 World IO where
+  lift1 = runIO

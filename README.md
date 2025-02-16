@@ -64,8 +64,8 @@ nextFibo r1 r2 t =
 fibo : Nat -> Nat
 fibo n =
   run1 $ \t =>
-    let r2 # t := ref (S Z) t
-        r1 # t := ref (S Z) t
+    let r2 # t := ref1 (S Z) t
+        r1 # t := ref1 (S Z) t
         _  # t := forN n (nextFibo r1 r2) t
      in read1 r1 t
 ```
@@ -76,8 +76,8 @@ Or, with some syntactic sugar sprinkled on top:
 fibo2 : Nat -> Nat
 fibo2 n =
   run1 $ T1.do
-     r1 <- ref (S Z)
-     r2 <- ref (S Z)
+     r1 <- ref1 (S Z)
+     r2 <- ref1 (S Z)
      forN n (nextFibo r1 r2)
      read1 r1
 ```
@@ -131,7 +131,7 @@ transparent (don't do this!):
 -- create a new mutable reference outside of `IO`:
 -- don't do this!
 mkRef : Nat -> R.IORef Nat
-mkRef = unsafePerformIO . newIORef
+mkRef = unsafePerformIO . R.newIORef
 
 -- read and write to a mutable reference outside
 -- of `IO`: don't do this!
@@ -564,15 +564,16 @@ And yet, `ST` is still considerably slower than explicit recursion.
 In addition, `traverse` is still not stack-safe, so it can't be used
 with large lists on the JavaScript and similar backends.
 
-In addition, it is currently not possible to get safe allocation-release
-cycles (such as allocating and releasing the memory for a raw C-pointer)
-with the `ST` monad. It is therefore quite limited in its current state.
+In addition, it is currently not (easily) possible to add additional
+capabilities - such as mutable arrays or C-pointers - to `ST`, since
+its constructor is not publicly exported.
+It is therefore quite limited in its current state.
 
 ## Enter: `T1`
 
 I am now going to show how the limitations demonstrated above
 can be overcome by using a linear token to which all kinds of
-(mutable!) resources can be bound and use locally in a computation.
+(mutable!) resources can be bound and used locally in a computation.
 
 This is going to replace `ST s`, and comes without the overhead from
 using a monad to sequence computations. The code therefore closely
@@ -590,45 +591,43 @@ zipWithIndex1 : Traversable1 f => f a -> f (Nat,a)
 zipWithIndex1 as = withRef1 0 $ \r => traverse1 (pairWithIndex1 r) as
 ```
 
-There are several things to note in the code above. First, `Ref1 Nat`
+There are several things to note in the code above. First, `Ref1 s Nat`
 is a mutable reference holding a natural number. It is bound to a
-linear token `t`, parameterized with a list of bound resources.
-We cannot use a `Ref1 a` without the token it was bound to, and we cannot
-bind it to a different token without using `unsafeBind`, which is again
-called "unsafe" for a reason. Function `withRef1` allocates and releases
-a mutable reference for us, and we are free to use it in our anonymous
-function (after the dollar sign).
+linear token `t` via state parameter `s`. This is the same technique
+used as with the `ST s` monad:
+We cannot use a `Ref1 s a` without the token it was bound to.
 
-The type `(1 t : T1 rs) -> R1 rs a` is so common in this kind of computation,
-that we get a short alias called `F1 rs a` for it:
+The type `(1 t : T1 s) -> R1 s a` is so common in this kind of computation,
+that we get a short alias called `F1 s a` for it:
 
 ```repl
 README> :printdef F1
-0 Data.Linear.Token.F1 : Resources -> Type -> Type
-F1 rs a = T1 rs -@ R1 rs a
+0 Data.Linear.Token.F1 : Type -> Type -> Type
+F1 s a = (1 _ : T1 s) -> R1 s a
 ```
 
 `R1 s a` is a linear result just like `IORes a`, that wraps a result
-of type `a` with a new linear token of type `T1 rs`. All of this
+of type `a` with a new linear token of type `T1 s`. All of this
 allows us to write safe, single-threaded and stateful computations
 in a way that strongly resembles programming in `PrimIO`.
 
 But how does this prevent us from using functions such as `read1` or
 `write1` with a mutable reference together with the wrong linear token?
-When we look at the type of `read1`, we see that there is a link between
-the mutable reference `r` and the list of resources `rs`:
+When we look at the type of `read1`, we see that as with the `ST` monad,
+the mutable reference is linked to the linear token via parameter `s`:
 
 ```repl
 README> :t read1
-Data.Linear.Ref1.read1 : (r : Ref1 a) -> {auto 0 _ : Res r rs} -> F1 rs a
+Data.Linear.Ref1.read1 : (r : Ref1 s a) -> F1 s a
 ```
 
-A value of type `Res r rs` is a proof that `r` is one of the elements of `rs`,
-that is, `r` is one of the resources bound to the linear token! Since a
-mutable reference will always be bound to the linear token it was created with
-(see function `ref1`), it is not possible to use a mutable reference with
-the wrong token. It therefore becomes completely useless outside of the
-current linear computation.
+Since a mutable reference will always be bound to the state thread
+it was created with (see function `ref1`), it is not possible to use a
+mutable reference with the wrong token. In addition, the function running
+a linear computation (`run1`) requires the state thread `s` to be
+universally quantified, just like with the `ST s` monad.
+It is therefore not possible, to leak a still usable, mutable reference out of a pure
+linear computation.
 
 ### A simple Word Count Example
 
@@ -636,8 +635,8 @@ In order to demonstrate how all of this works together, we are
 going to write a simple word count program that counts characters,
 words, and lines of text in a single traversal of a list of
 characters. I'm not claiming that this is the most elegant or
-declarative way to do this. It just shows how to create, use, and
-release mutable references.
+declarative way to do this. It just shows how to create and use
+linear mutable references.
 
 When counting characters, words, and lines, we need three
 mutable references for counting each entity. In addition, we
@@ -671,8 +670,8 @@ processChar c w l b x t =
 ```
 
 The actual `wordCount` function has to setup all mutable variables,
-traverse the sequence of characters, read the final values from
-the mutable refs, and cleanup everything at the end.
+traverse the sequence of characters, and read the final values from
+the mutable refs.
 
 ```idris
 record WordCount where
@@ -687,10 +686,10 @@ wordCount : String -> WordCount
 wordCount "" = WC 0 0 0
 wordCount s  =
   run1 $ \t =>
-    let b # t := ref False t
-        l # t := ref (S Z) t
-        w # t := ref Z t
-        c # t := ref Z t
+    let b # t := ref1 False t
+        l # t := ref1 (S Z) t
+        w # t := ref1 Z t
+        c # t := ref1 Z t
         _ # t := traverse1_ (processChar c w l b) (unpack s) t
         _ # t := endWord b w t
         x # t := read1 c t
@@ -704,8 +703,6 @@ imperative languages, we have to introduce mutable variables before
 we can use them. It is also a bit tedious that we have to manually
 thread our linear token through the whole computation. However, there is
 some `do` and applicative notation available from `Syntax.T1`.
-There is also utility function `allocRun1`, which allows us to allocate
-all resources from a heterogeneous list in one go.
 Here's the word count example with some syntactic sugar:
 
 ```idris
@@ -713,10 +710,10 @@ wordCount2 : String -> WordCount
 wordCount2 "" = WC 0 0 0
 wordCount2 s  =
   run1 $ T1.do
-    c <- ref 0
-    w <- ref 0
-    l <- ref 0
-    b <- ref False
+    c <- ref1 0
+    w <- ref1 0
+    l <- ref1 0
+    b <- ref1 False
     traverse1_ (processChar c w l b) (unpack s)
     endWord b w
     T1.[| WC (read1 c) (read1 w) (read1 l) |]
@@ -729,12 +726,13 @@ To understand this, look at the type of `run1`:
 
 ```repl
 README> :t run1
-Data.Linear.Token.run1 : F1 [] a -> a
+Data.Linear.Token.run1 : (forall s . F1 s a) -> a
 ```
 
 We extract a value of type `a` from a linear computation that
-*starts and ends* with zero allocated resources: We can't forget to
-release all resources that we set up along the way!
+is universally quantified over state thread `s`. Even if a mutable
+reference, which will also be tagged with `s`, leaks out of this
+computation, it will not longer be usable in other linear computations!
 
 Finally, we can test our mini application:
 
@@ -763,92 +761,51 @@ Ideally, the following statements must hold:
 * We'd like to reuse our algorithms involving mutable state both in pure
   code as well as in `IO`, where we'd like to pass mutable structures
   coming - for instance - from the FFI (foreign function interface) to
-  functions of type `F1 rs a` and evaluate the result - again in `IO`.
+  functions of type `F1 s a` and evaluate the result - again in `IO`.
 * Mutable state is all about performance: We will not accept regressions in
   terms of performance to make the above possible.
 
-Fortunately, there is a way to do all of this. There is as special type of
-`Resources` that is reserved for mutable state living in `IO` land:
-`[World]`. In addition, there is an interface - `InIO` - that allows
-us to tag a type so that the compiler knows it belong to `IO`.
+Fortunately, there is a way to do all of this. There is as special empty
+type called `World` we can use to tag computations that should run in `IO`.
+While this allows us to use all functions of type `F1 s a` in `IO` (because
+they are universally quantified over `s`, and `s` can therefore be
+substituted with `World`), we can also mark FFI functions that should only
+be used with `IO` by tagging them with the `World` type: `F1 World a`.
 
-Here's some example code demonstrating the concept:
+Here's some example code demonstrating the concept: We write a generalized
+version of the word count example that runs the whole computation in
+`F1 s`. Since `s` is universally quantified, we can use this computation
+from within `IO` as well as in a pure computation:
 
 ```idris
-incAgain : (r : Ref s Nat) -> F1' s
-incAgain r = mod1 r S
+wordCountGen : String -> F1 s WordCount
+wordCountGen "" = T1.pure $ WC 0 0 0
+wordCountGen s  = T1.do
+    c <- ref1 0
+    w <- ref1 0
+    l <- ref1 0
+    b <- ref1 False
+    traverse1_ (processChar c w l b) (unpack s)
+    endWord b w
+    T1.[| WC (read1 c) (read1 w) (read1 l) |]
 
-incIO : Ref1.IORef Nat -> F1' World
-incIO r = incAgain r
+wordCountIO : String -> IO WordCount
+wordCountIO s = runIO (wordCountGen s)
 
-incPure : (r : Ref s Nat) -> F1' s
-incPure r = incAgain r
+wordCountPure : String -> WordCount
+wordCountPure s = run1 (wordCountGen s)
 ```
 
-First, we redefine `inc` with a more general type (function `incAgain`).
-What we see here is that the function now takes an argument of type
-`Ref t Nat`. This is our actual type for mutable references, and `t` is
-a tag than can either be `RPure`, or `RIO`. `Ref1` is then just an alias
-for `Ref RPure`, and `IORef` is an alias for `Ref RIO`.
+## The `Pure s` Monad
 
-The other two functions demonstrate, that `incAgain` can be safely used
-both with an `IORef` as well as with a `Ref1`. Internally, the two are
-exactly the same and the generated code is also exactly the same, so
-`incAgain` could be some arbitrarily complex linear computation involving
+We are finally capable of make use of this from a proper, efficient
+monad that's extensible with other stateful computations:
+`Control.Monad.Pure.Pure`. It is comparable to `ST s` but since it's
+just a newtype wrapper around `F1 s a`, it can be freely extended by
+wrapping arbitrary linear computations. If tagged with `World`, it
+can be used as a replacement for `IO`, otherwise (if universally quantified
+over `s`) it can be used as a pure computation making use of localized
 mutable state.
-
-We require two more ingredients to make this all work out. First,
-we must make sure that upon creation, a mutable reference either
-explicitly belongs to `IO` (functions `refIO` and `newIORef`) or to
-pure computations (function `ref1`). Second, we need a way to
-run functions of type `F1 [World] a`, and running such functions
-should be an `IO` action. That's what utilities `primRun` and `runIO`
-are used for.
-
-Below is a complete example demonstrating all of this
-by going back to computing Fibonacci numbers:
-
-```idris
-parameters (r1, r2 : Ref s Nat)
-
-  nextFibo' : F1' s
-  nextFibo' = T1.do
-    f1 <- read1 r1
-    f2 <- read1 r2
-    write1 r2 (f1+f2)
-    write1 r1 f2
-
-  fibo' : Nat -> F1 s Nat
-  fibo' n = T1.do
-    write1 r1 1
-    write1 r2 1
-    forN n nextFibo'
-    read1 r1
-```
-
-By allocating two mutable references in `IO` land, we can safely
-use `fibo'` from within `IO`:
-
-```idris
-fiboIO : Nat -> IO Nat
-fiboIO n = do
-  r1 <- Ref1.newIORef Z
-  r2 <- Ref1.newIORef Z
-  runIO (fibo' r1 r2 n)
-```
-
-Likewise, by allocating two mutable linear references and
-binding them to a linear token, we can safely use `fibo'`
-in a pure computation:
-
-```idris
-fiboPure : Nat -> Nat
-fiboPure n =
-  run1 $ T1.do
-    r2 <- ref Z
-    r1 <- ref Z
-    fibo' r1 r2 n
-```
 
 <!-- vi: filetype=idris2:syntax=markdown
 -->
