@@ -142,3 +142,8 @@ Lift1 World IO where
 public export
 0 IO1 : Type -> Type
 IO1 = F1 World
+
+||| Convenience alias for `Lift1 World`
+public export
+0 LIO : (f : Type -> Type) -> Type
+LIO = Lift1 World
