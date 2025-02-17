@@ -38,7 +38,7 @@ data R1 : (s,a : Type) ->  Type where
 
 ||| `R1` is a functor, but since `map` does not have the correct
 ||| quantities, this is what we use instead.
-export
+export %inline
 mapR1 : (a -> b) -> (1 r : R1 s a) -> R1 s b
 mapR1 f (v # t) = f v # t
 
@@ -52,6 +52,12 @@ F1 s a = (1 t : T1 s) -> R1 s a
 public export
 0 F1' : (s : Type) -> Type
 F1' s = F1 s ()
+
+||| `F1` is a functor, but since it is a function type, we cannot
+||| implement an interface for it (but see `Control.Monad.Pure`).
+export %inline
+mapF1 : (a -> b) -> F1 s a -> F1 s b
+mapF1 f act t = mapR1 f (act t)
 
 ||| Runs a linear computation by providing it with its own linear token.
 |||
