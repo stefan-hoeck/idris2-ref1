@@ -22,7 +22,7 @@ bind : Pure s a -> (a -> Pure s b) -> Pure s b
 
 export %inline
 Functor (Pure s) where
-  map f (P g) = P $ \t => mapR1 f (g t)
+  map f (P g) = P $ mapF1 f g
 
 export %inline
 Applicative (Pure s) where
