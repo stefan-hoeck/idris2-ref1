@@ -120,7 +120,6 @@ ffi prim w = let MkIORes v w := prim w in v # w
 -- Lift1
 --------------------------------------------------------------------------------
 
-
 ||| An interface for wrapping linear computations in a monadic context.
 |||
 ||| This allows us to deal with pure as well as effectful computations.
@@ -133,3 +132,7 @@ interface Monad f => Lift1 (0 s : Type) (0 f : Type -> Type) | f where
 export %inline
 Lift1 World IO where
   lift1 = runIO
+
+public export
+0 IO1 : Type -> Type
+IO1 = F1 World
