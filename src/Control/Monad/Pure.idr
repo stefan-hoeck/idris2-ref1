@@ -19,6 +19,7 @@ record Pure (s,a : Type) where
 
 %inline
 bind : Pure s a -> (a -> Pure s b) -> Pure s b
+bind (P v) f = P $ \t => let x # t := v t in run (f x) t
 
 export %inline
 Functor (Pure s) where
