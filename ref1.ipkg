@@ -13,5 +13,6 @@ modules = Control.Monad.Pure
         , Data.Linear.Ref1
         , Data.Linear.Token
         , Data.Linear.Traverse1
+        , Data.Linear.Unique
 
         , Syntax.T1
