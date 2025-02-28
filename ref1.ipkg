@@ -9,6 +9,7 @@ depends    = base         >= 0.7.0
 
 modules = Control.Monad.Pure
 
+        , Data.Linear.Deferred
         , Data.Linear.List
         , Data.Linear.Ref1
         , Data.Linear.Token

@@ -53,6 +53,11 @@ public export
 0 F1' : (s : Type) -> Type
 F1' s = F1 s ()
 
+||| The dummy action that performs no effect at all.
+export %inline
+unit1 : F1' s
+unit1 = (() # )
+
 ||| `F1` is a functor, but since it is a function type, we cannot
 ||| implement an interface for it (but see `Control.Monad.Pure`).
 export %inline
