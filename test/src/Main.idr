@@ -1,6 +1,8 @@
 module Main
 
+import Data.SortedSet
 import Data.Linear.Ref1
+import Data.Linear.Unique
 import Syntax.T1
 import Hedgehog
 
@@ -66,6 +68,21 @@ prop_casmod1 =
     [x,y] <- forAll $ hlist [anyBits8, anyBits8]
     (x+y) === withRef1 x (\r,t => let _ # t := casmod1 r (+y) t in read1 r t)
 
+tokCount : Nat -> Nat
+tokCount n = run1 (go empty n)
+  where
+    go : SortedSet (Token s) -> Nat -> F1 s Nat
+    go ts 0     t = length (Prelude.toList ts) # t
+    go ts (S k) t =
+      let tok # t := token1 t
+       in go (insert tok ts) k t
+
+prop_token1 : Property
+prop_token1 =
+  property $ do
+    n <- forAll (nat $ linear 0 20)
+    tokCount n === n
+
 props : Group
 props =
   MkGroup "ref1"
@@ -78,6 +95,7 @@ props =
     , ("prop_casmod1", prop_casmod1)
     , ("prop_caswrite1", prop_caswrite1)
     , ("prop_caswrite_diff", prop_caswrite_diff)
+    , ("prop_token1", prop_token1)
     ]
 
 main : IO ()
