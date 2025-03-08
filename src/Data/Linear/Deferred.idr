@@ -152,10 +152,8 @@ putDeferred1 (D ref) v t =
     upd (Val x)   = (Val x, unit1)
     upd (Obs cbs) = (Val v, traverse1_ (\cb => cb v) (Prelude.toList cbs))
 
-||| Stop observing a `Deferred s a`
-export
-unobserveDeferred1 : Deferred s a -> Token s -> F1 s ()
-unobserveDeferred1 (D ref) tok =
+unobs : Deferred s a -> Token s -> F1 s ()
+unobs (D ref) tok =
   casmod1 ref $ \case
     Obs cbs => Obs $ delete tok cbs
     v       => v
@@ -168,15 +166,16 @@ unobserveDeferred1 (D ref) tok =
 ||| The action that is returned by this function can be used to
 ||| unregister the observer.
 export
-observeDeferred1 : Deferred s a -> Token s -> (a -> F1' s) -> F1 s ()
-observeDeferred1 (D ref) tok cb t =
-  let act # t := casupdate1 ref upd t
+observeDeferred1 : Deferred s a -> (a -> F1' s) -> F1 s (F1' s)
+observeDeferred1 (D ref) cb t =
+  let tok # t := token1 t
+      act # t := casupdate1 ref (upd tok) t
    in act t
 
   where
-    upd : ST s a -> (ST s a, F1' s)
-    upd (Val x)   = (Val x, cb x)
-    upd (Obs cbs) = (Obs (insert tok cb cbs), unit1)
+    upd : Token s -> ST s a -> (ST s a, F1 s (F1' s))
+    upd tk (Val x)   = (Val x, \t => let _ # t := cb x t in unit1 # t)
+    upd tk (Obs cbs) = (Obs (insert tk cb cbs), (unobs (D ref) tk #))
 
 --------------------------------------------------------------------------------
 -- Lift1 Utilities
@@ -222,8 +221,3 @@ peekDeferred d = lift1 $ peekDeferred1 d
 export %inline
 putDeferred : Lift1 s f => Deferred s a -> (v : a) -> f ()
 putDeferred d v = lift1 $ putDeferred1 d v
-
-||| Lifted version of `unobserveDeferred1`
-export %inline
-unobserveDeferred : Lift1 s f => Deferred s a -> Token s -> f ()
-unobserveDeferred def tok = lift1 $ unobserveDeferred1 def tok
