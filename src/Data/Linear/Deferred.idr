@@ -57,6 +57,13 @@ unobs1 ref =
     Obs1 _ => Ini1
     v      => v
 
+||| Returns `True` if a value has been set at the given `Once`.
+export %inline
+completedOnce1 : Once s a -> F1 s Bool
+completedOnce1 (O r) t =
+  let Val1 _ # t := read1 r t | _ # t => False # t
+   in True # t
+
 ||| Reads the set value of a `Deferred1`. Returns `Nothing`,
 ||| if no value has been set yet.
 export
@@ -129,6 +136,13 @@ export %inline
 deferredOf1 : (0 a : _) -> F1 s (Deferred s a)
 deferredOf1 _ = deferred1
 
+||| Returns `True` if a value has been set at the given `Deferred`.
+export %inline
+completed1 : Deferred s a -> F1 s Bool
+completed1 (D r) t =
+  let Val _ # t := read1 r t | _ # t => False # t
+   in True # t
+
 ||| Reads the set value of a `Deferred`. Returns `Nothing`,
 ||| if no value has been set yet.
 export
@@ -196,11 +210,21 @@ export %inline
 peekOnce : Lift1 s f => Once s a -> f (Maybe a)
 peekOnce o = lift1 $ peekOnce1 o
 
+||| Lifted version of `completedOnce1`
+export %inline
+completedOnce : Lift1 s f => Once s a -> f Bool
+completedOnce d = lift1 $ completedOnce1 d
+
 
 ||| Lifted version of `putOnce1`
 export %inline
 putOnce : Lift1 s f => Once s a -> (v : a) -> f ()
 putOnce o v = lift1 $ putOnce1 o v
+
+||| Lifted version of `completed1`
+export %inline
+completed : Lift1 s f => Deferred s a -> f Bool
+completed d = lift1 $ completed1 d
 
 ||| Lifted version of `deferred1`
 export %inline
