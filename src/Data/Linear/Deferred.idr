@@ -172,7 +172,8 @@ unobs (D ref) tok =
     Obs cbs => Obs $ delete tok cbs
     v       => v
 
-||| Observe a `Deferred` by installing a callback.
+||| Observe a `Deferred` by installing a callback using the given
+||| token for identification.
 |||
 ||| The callback is invoked immediately in case the value has
 ||| already been set.
@@ -180,16 +181,28 @@ unobs (D ref) tok =
 ||| The action that is returned by this function can be used to
 ||| unregister the observer.
 export
-observeDeferred1 : Deferred s a -> (a -> F1' s) -> F1 s (F1' s)
-observeDeferred1 (D ref) cb t =
-  let tok # t := token1 t
-      act # t := casupdate1 ref (upd tok) t
+observeDeferredAs1 : Deferred s a -> Token s -> (a -> F1' s) -> F1 s (F1' s)
+observeDeferredAs1 (D ref) tok cb t =
+  let act # t := casupdate1 ref upd t
    in act t
 
   where
-    upd : Token s -> ST s a -> (ST s a, F1 s (F1' s))
-    upd tk (Val x)   = (Val x, \t => let _ # t := cb x t in unit1 # t)
-    upd tk (Obs cbs) = (Obs (insert tk cb cbs), (unobs (D ref) tk #))
+    upd : ST s a -> (ST s a, F1 s (F1' s))
+    upd (Val x)   = (Val x, \t => let _ # t := cb x t in unit1 # t)
+    upd (Obs cbs) = (Obs (insert tok cb cbs), (unobs (D ref) tok #))
+
+||| Observe a `Deferred` by installing a callback.
+|||
+||| The callback is invoked immediately in case the value has
+||| already been set.
+|||
+||| The action that is returned by this function can be used to
+||| unregister the observer.
+export %inline
+observeDeferred1 : Deferred s a -> (a -> F1' s) -> F1 s (F1' s)
+observeDeferred1 def cb t =
+  let tok # t := token1 t
+   in observeDeferredAs1 def tok cb t
 
 --------------------------------------------------------------------------------
 -- Lift1 Utilities
