@@ -87,11 +87,11 @@ writeref r = lift1 . write1 r
 ||| anyway.
 export %inline
 caswrite1 : (r : Ref s a) -> (pre,val : a) -> F1 s Bool
-caswrite1 (R1 m) pre val =
+caswrite1 (R1 m) pre val t =
   -- The use of `believe_me` is justified because the foreign call
   -- returns 0 for `False` and 1 for `True`. These are exactly
   -- the values a `Bool` is converted to during codegen.
-  believe_me $ prim__casWrite m pre val
+  believe_me (prim__casWrite m pre val) # t
 
 ||| Atomic modification of a mutable reference using a CAS-loop
 ||| internally
