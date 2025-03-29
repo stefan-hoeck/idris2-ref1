@@ -65,9 +65,13 @@ tok_ = believe_me $ unsafePerformIO $ newref 0
 ||| This token is unique throughout the lifetime of an application,
 ||| as it is generated from a single, global, mutable reference.
 ||| Unique token generation is thread-safe.
-export %inline
+export
 token1 : F1 s (Token s)
-token1 = casupdate1 tok_ (\n => (n+1, T n))
+token1 t =
+  assert_total $
+   let v    # t := read1 tok_ t
+       True # t := caswrite1 tok_ v (S v) t | _ # t => token1 t
+    in T v # t
 
 ||| Generates a new unique token.
 |||
