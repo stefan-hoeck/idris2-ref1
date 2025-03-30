@@ -14,20 +14,15 @@ import Data.SortedMap
 
 %default total
 
--- internal state of a `Deferred` value
-data ST : Type -> Type -> Type where
-  Val : (v : a) -> ST s a
-  Obs : (cbs : SortedMap (Token s) (a -> F1' s)) -> ST s a
+--------------------------------------------------------------------------------
+-- Once
+--------------------------------------------------------------------------------
 
 -- internal state of a `Once` value
 data ST1 : Type -> Type -> Type where
   Ini1 : ST1 s a
   Val1 : (v : a) -> ST1 s a
   Obs1 : (cb : a -> F1' s) -> ST1 s a
-
---------------------------------------------------------------------------------
--- Once
---------------------------------------------------------------------------------
 
 ||| An atomic reference that can be set exactly once and observed
 ||| by at most one observer. All operations on `Once` are thread-safe.
@@ -51,12 +46,6 @@ export %inline
 onceOf1 : (0 a : _) -> F1 s (Once s a)
 onceOf1 _ = once1
 
-unobs1 : Ref s (ST1 s a) -> F1' s
-unobs1 ref =
-  casmod1 ref $ \case
-    Obs1 _ => Ini1
-    v      => v
-
 ||| Returns `True` if a value has been set at the given `Once`.
 export %inline
 completedOnce1 : Once s a -> F1 s Bool
@@ -64,7 +53,7 @@ completedOnce1 (O r) t =
   let Val1 _ # t := read1 r t | _ # t => False # t
    in True # t
 
-||| Reads the set value of a `Deferred1`. Returns `Nothing`,
+||| Reads the set value of a `Once`. Returns `Nothing`,
 ||| if no value has been set yet.
 export
 peekOnce1 : Once s a -> F1 s (Maybe a)
@@ -79,15 +68,30 @@ peekOnce1 (O ref) t =
 ||| invoked immediately.
 export
 putOnce1 : Once s a -> (v : a) -> F1' s
-putOnce1 (O ref) v t =
-  let act # t := casupdate1 ref upd t
-   in act t
+putOnce1 (O ref) v t = assert_total $ let x # t := read1 ref t in go x x t
 
   where
-    upd : ST1 s a -> (ST1 s a, F1' s)
-    upd (Val1 x)  = (Val1 x, unit1)
-    upd (Obs1 cb) = (Val1 v, cb v)
-    upd Ini1      = (Val1 v, unit1)
+    go : ST1 s a -> ST1 s a -> F1' s
+    go x Ini1 t =
+      case caswrite1 ref x (Val1 v) t of
+        True # t => () # t
+        _    # t => putOnce1 (O ref) v t
+    go x (Val1 _)  t = () # t
+    go x (Obs1 cb) t =
+      case caswrite1 ref x (Val1 v) t of
+        True # t => cb v t
+        _    # t => putOnce1 (O ref) v t
+
+unobs : Once s a -> F1' s
+unobs (O ref) t =
+  assert_total $ let x # t := read1 ref t in go x x t
+  where
+    go : ST1 s a -> ST1 s a -> F1' s
+    go x (Obs1 cb) t =
+      case caswrite1 ref x Ini1 t of
+        True # t => () # t
+        _    # t => unobs (O ref) t
+    go x _ t = () # t
 
 ||| Observe a `Once` by installing a callback.
 |||
@@ -103,19 +107,24 @@ putOnce1 (O ref) v t =
 |||       this is a no-op and the callback never invoked.
 export
 observeOnce1 : Once s a -> (a -> F1' s) -> F1 s (F1' s)
-observeOnce1 (O ref) cb t =
-  let act # t := casupdate1 ref upd t
-   in act t
-
+observeOnce1 (O ref) cb t = assert_total $ let x # t := read1 ref t in go x x t
   where
-    upd : ST1 s a -> (ST1 s a, F1 s (F1' s))
-    upd (Val1 x) = (Val1 x, \t => let _ # t := cb x t in unit1 # t)
-    upd Ini1     = (Obs1 cb, (unobs1 ref #))
-    upd x        = (x, (unit1 #))
+    go : ST1 s a -> ST1 s a -> F1 s (F1' s)
+    go x (Val1 v) t = let _ # t := cb v t in unit1 # t
+    go x Ini1     t =
+      case caswrite1 ref x (Obs1 cb) t of
+        True # t => unobs (O ref) # t
+        _    # t => observeOnce1 (O ref) cb t
+    go x _        t = unit1 # t
 
 --------------------------------------------------------------------------------
 -- Deferred
 --------------------------------------------------------------------------------
+
+-- internal state of a `Deferred` value
+data ST : Type -> Type -> Type where
+  Val : (v : a) -> ST s a
+  Obs : (cbs : SortedMap (Token s) (a -> F1' s)) -> ST s a
 
 ||| An atomic reference that can be set exactly once and observed
 ||| by an arbitrary number of observers. Any operations on a `Deferred`
@@ -157,20 +166,24 @@ peekDeferred1 (D ref) t =
 ||| been set first. Any observers will be invoked immediately.
 export
 putDeferred1 : Deferred s a -> (v : a) -> F1' s
-putDeferred1 (D ref) v t =
-  let act # t := casupdate1 ref upd t
-   in act t
+putDeferred1 (D r) v t = assert_total $ let x # t := read1 r t in go x x t
 
   where
-    upd : ST s a -> (ST s a, F1' s)
-    upd (Val x)   = (Val x, unit1)
-    upd (Obs cbs) = (Val v, traverse1_ (\cb => cb v) (Prelude.toList cbs))
+    go : ST s a -> ST s a -> F1' s
+    go x (Val _)   t = () # t
+    go x (Obs cbs) t =
+     let True # t := caswrite1 r x (Val v) t | _ # t => putDeferred1 (D r) v t
+      in traverse1_ (\cb => cb v) (Prelude.toList cbs) t
 
-unobs : Deferred s a -> Token s -> F1 s ()
-unobs (D ref) tok =
-  casmod1 ref $ \case
-    Obs cbs => Obs $ delete tok cbs
-    v       => v
+unobsDef : Deferred s a -> Token s -> F1 s ()
+unobsDef (D r) tok t = assert_total $ let x # t := read1 r t in go x x t
+  where
+    go : ST s a -> ST s a -> F1' s
+    go x (Val _)   t = () # t
+    go x (Obs cbs) t =
+      case caswrite1 r x (Obs $ delete tok cbs) t of
+        True # t => () # t
+        _    # t => unobsDef (D r) tok t
 
 ||| Observe a `Deferred` by installing a callback using the given
 ||| token for identification.
@@ -182,14 +195,15 @@ unobs (D ref) tok =
 ||| unregister the observer.
 export
 observeDeferredAs1 : Deferred s a -> Token s -> (a -> F1' s) -> F1 s (F1' s)
-observeDeferredAs1 (D ref) tok cb t =
-  let act # t := casupdate1 ref upd t
-   in act t
-
+observeDeferredAs1 (D r) tok cb t =
+  assert_total $ let x # t := read1 r t in go x x t
   where
-    upd : ST s a -> (ST s a, F1 s (F1' s))
-    upd (Val x)   = (Val x, \t => let _ # t := cb x t in unit1 # t)
-    upd (Obs cbs) = (Obs (insert tok cb cbs), (unobs (D ref) tok #))
+    go : ST s a -> ST s a -> F1 s (F1' s)
+    go x (Val v)   t = let _ # t := cb v t in unit1 # t
+    go x (Obs cbs) t =
+     case caswrite1 r x (Obs $ insert tok cb cbs) t of
+       True # t => unobsDef (D r) tok # t
+       _    # t => observeDeferredAs1 (D r) tok cb t
 
 ||| Observe a `Deferred` by installing a callback.
 |||
