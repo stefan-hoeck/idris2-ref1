@@ -2,6 +2,8 @@ module Data.Linear.Ref1
 
 import public Data.Linear.Token
 
+import System.Concurrency
+
 %default total
 
 --------------------------------------------------------------------------------
@@ -167,6 +169,17 @@ readAndMod1 r f t =
 export
 whenRef1 : (r : Ref s Bool) -> Lazy (F1' s) -> F1' s
 whenRef1 r f t = let b # t1 := read1 r t in when1 b f t1
+
+||| This function atomically runs its argument according to the provided mutex.
+||| It can for instance be used to modify the contents of a mutable reference `r`
+||| with a function `f` in a safe way in a multithreaded program provided that
+||| other threads also rely on the same `lock` to modify `r`.
+export
+atomically : (r : Ref World a) -> Mutex -> (f : a -> a) -> F1' World
+atomically r lock f t =
+  let _ # t := ioToF1 (mutexAcquire lock) t
+      _ # t := casmod1 r f t
+    in ioToF1 (mutexRelease lock) t
 
 --------------------------------------------------------------------------------
 -- Allocating mutable references
