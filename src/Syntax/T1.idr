@@ -6,6 +6,22 @@ import public Data.Linear.Token
 %default total
 
 export %inline
+map1 : (a -> b) -> F1 s a -> F1 s b
+map1 f g t = let v # t := g t in f v # t
+
+export %inline
+(<$>) : (a -> b) -> F1 s a -> F1 s b
+(<$>) = map1
+
+export %inline
+(<&>) : F1 s a -> (a -> b) -> F1 s b
+(<&>) = flip map1
+
+export %inline
+ignore1 : F1 s a -> F1' s
+ignore1 f t = let _ # t := f t in () # t
+
+export %inline
 pure : a -> F1 s a
 pure = (#)
 
