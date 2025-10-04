@@ -21,6 +21,11 @@ interface Foldable1 (0 f : Type -> Type) where
   foldMap1   : Monoid m => (a -> F1 s m) -> f a -> F1 s m
   traverse1_ : (a -> F1' s) -> f a -> F1' s
 
+||| Flipped version of `traverse1_`
+export %inline
+for1_ : Foldable1 f => f a -> (a -> F1' s) -> F1' s
+for1_ x f = traverse1_ f x
+
 export
 Foldable1 Maybe where
   foldl1 f v Nothing  t = v # t
@@ -216,6 +221,11 @@ Traversable1 List1 where
     let w  # t1 := f x t
         wx # t2 := traverse1 f xs t1
      in (w ::: wx) # t2
+
+||| Flipped version of `traverse1`
+export %inline
+for1 : Traversable1 f => f a -> (a -> F1 s b) -> F1 s (f b)
+for1 x f = traverse1 f x
 
 --------------------------------------------------------------------------------
 -- Utilities
