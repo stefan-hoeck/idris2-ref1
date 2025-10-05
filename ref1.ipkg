@@ -16,4 +16,6 @@ modules = Control.Monad.Pure
         , Data.Linear.Traverse1
         , Data.Linear.Unique
 
+        , Data.String.Builder
+
         , Syntax.T1
