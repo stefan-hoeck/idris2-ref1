@@ -12,6 +12,7 @@ modules = Control.Monad.Pure
         , Data.Linear.Deferred
         , Data.Linear.List
         , Data.Linear.Ref1
+        , Data.Linear.Sink
         , Data.Linear.Token
         , Data.Linear.Traverse1
         , Data.Linear.Unique
