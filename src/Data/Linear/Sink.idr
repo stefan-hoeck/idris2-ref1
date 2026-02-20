@@ -58,6 +58,10 @@ sinkAs : HasIO io => (0 a : Type) -> (s : Sink a) => a -> io ()
 sinkAs a = sink
 
 export %inline
+sinkTo : HasIO io => (s : Sink a) -> a -> io ()
+sinkTo s = runIO . s.sink1
+
+export %inline
 onceSink : Once World t -> Sink t
 onceSink o = S (putOnce1 o)
 
