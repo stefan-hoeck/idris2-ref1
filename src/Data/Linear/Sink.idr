@@ -1,6 +1,7 @@
 module Data.Linear.Sink
 
 import Data.Contravariant
+import Data.Linear.Deferred
 import Data.Linear.Ref1
 import Syntax.T1
 import public Data.Linear.Token
@@ -12,7 +13,7 @@ public export
 record Sink o where
   [noHints]
   constructor S
-  sink : o -> IO1 ()
+  sink1 : o -> IO1 ()
 
 ||| A `Sink` is a contravariant functor.
 export %inline
@@ -40,3 +41,26 @@ snocSink1 a = T1.do
     readList : IORef (SnocList a) -> IO1 (List a)
     readList ref = casupdate1 ref $ \sv => ([<], sv <>> [])
 
+export
+Semigroup (Sink a) where
+  S s1 <+> S s2 = S $ \v,t => let _ # t := s1 v t in s2 v t
+
+export
+Monoid (Sink a) where
+  neutral = S $ \_,t => () # t
+
+export %inline
+sink : HasIO io => (s : Sink a) => a -> io ()
+sink = runIO . s.sink1
+
+export %inline
+sinkAs : HasIO io => (0 a : Type) -> (s : Sink a) => a -> io ()
+sinkAs a = sink
+
+export %inline
+onceSink : Once World t -> Sink t
+onceSink o = S (putOnce1 o)
+
+export %inline
+deferredSink : Deferred World t -> Sink t
+deferredSink o = S (putDeferred1 o)
