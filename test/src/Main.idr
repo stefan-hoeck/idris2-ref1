@@ -56,6 +56,12 @@ prop_caswrite_diff =
     [x,y] <- forAll $ hlist [anyBits8, anyBits8]
     (False,x) === withRef1 x (\r => casWriteGet r (x+1) y)
 
+prop_casswap1 : Property
+prop_casswap1 =
+  property $ do
+    [x,y] <- forAll $ hlist [anyBits8, anyBits8]
+    y === withRef1 x (\r,t => let _ # t := casswap1 r y t in read1 r t)
+
 prop_casupdate1 : Property
 prop_casupdate1 =
   property $ do
@@ -93,6 +99,7 @@ props =
     , ("prop_readandmod1", prop_readandmod1)
     , ("prop_casupdate1", prop_casupdate1)
     , ("prop_casmod1", prop_casmod1)
+    , ("prop_casswap1", prop_casswap1)
     , ("prop_caswrite1", prop_caswrite1)
     , ("prop_caswrite_diff", prop_caswrite_diff)
     , ("prop_token1", prop_token1)

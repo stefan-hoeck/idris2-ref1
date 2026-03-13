@@ -93,6 +93,22 @@ caswrite1 (R1 m) pre val t =
   -- the values a `Bool` is converted to during codegen.
   believe_me (prim__casWrite m pre val) # t
 
+||| Atomic overwrite of a mutable reference using a CAS-loop
+||| internally
+|||
+||| This is supported and has been tested on the Chez and Racket backends.
+||| It trivially works on the JavaScript backends, which are single-threaded
+||| anyway.
+export
+casswap1 : (r : Ref s a) -> a -> F1' s
+casswap1 r v t = assert_total (loop t)
+  where
+    covering loop : F1' s
+    loop t =
+      let cur  # t := read1 r t
+          True # t := caswrite1 r cur v t | _ # t => loop t
+       in () # t
+
 ||| Atomic modification of a mutable reference using a CAS-loop
 ||| internally
 |||
