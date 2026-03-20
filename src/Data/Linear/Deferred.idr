@@ -53,7 +53,6 @@ completedOnce1 : Once s a -> F1 s Bool
 completedOnce1 (O r) t =
   case read1 r t of
     Val1 _ # t => True # t
-    Cnl1   # t => True # t
     _      # t => False # t
 
 ||| Reads the set value of a `Once`. Returns `Nothing`,
