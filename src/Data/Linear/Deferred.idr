@@ -140,6 +140,10 @@ observeOnce1 (O ref) cb t = assert_total $ let x # t := read1 ref t in go x x t
       case caswrite1 ref x (Obs1 cb) t of
         True # t => unobs (O ref) # t
         _    # t => observeOnce1 (O ref) cb t
+    go x Cnl1     t =
+      case caswrite1 ref x (Obs1 cb) t of
+        True # t => unobs (O ref) # t
+        _    # t => observeOnce1 (O ref) cb t
     go x _        t = unit1 # t
 
 --------------------------------------------------------------------------------
