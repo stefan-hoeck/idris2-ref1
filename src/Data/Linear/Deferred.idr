@@ -21,6 +21,7 @@ import Data.SortedMap
 -- internal state of a `Once` value
 data ST1 : Type -> Type -> Type where
   Ini1 : ST1 s a
+  Cnl1 : ST1 s a
   Val1 : (v : a) -> ST1 s a
   Obs1 : (cb : a -> F1' s) -> ST1 s a
 
@@ -50,8 +51,10 @@ onceOf1 _ = once1
 export %inline
 completedOnce1 : Once s a -> F1 s Bool
 completedOnce1 (O r) t =
-  let Val1 _ # t := read1 r t | _ # t => False # t
-   in True # t
+  case read1 r t of
+    Val1 _ # t => True # t
+    Cnl1   # t => True # t
+    _      # t => False # t
 
 ||| Reads the set value of a `Once`. Returns `Nothing`,
 ||| if no value has been set yet.
@@ -63,24 +66,40 @@ peekOnce1 (O ref) t =
 
 ||| Atomically tries to write the given value to a `Once`.
 |||
+||| Returns `True` if the value was written successfully
+||| and `False`, if another value had already been written
+||| or observation was cancelled.
+|||
+||| The value is written if and only if no other value has
+||| been set first and observing has not been cancelled.
+||| If an observer has been registered, it will be
+||| invoked immediately.
+export
+completeOnce1 : Once s a -> (v : a) -> F1 s Bool
+completeOnce1 (O ref) v t =
+  assert_total $ let x # t := read1 ref t in go x x t
+
+  where
+    go : ST1 s a -> ST1 s a -> F1 s Bool
+    go x Ini1 t =
+      case caswrite1 ref x (Val1 v) t of
+        True # t => True # t
+        _    # t => completeOnce1 (O ref) v t
+    go x (Val1 _)  t = False # t
+    go x (Obs1 cb) t =
+      case caswrite1 ref x (Val1 v) t of
+        True # t => let _ # t := cb v t in True # t
+        _    # t => completeOnce1 (O ref) v t
+    go x Cnl1 t = False # t
+
+||| Atomically tries to write the given value to a `Once`.
+|||
 ||| The value is written if and only if no other value has
 ||| been set first. If an observer has been registered, it will be
 ||| invoked immediately.
-export
+export %inline
 putOnce1 : Once s a -> (v : a) -> F1' s
-putOnce1 (O ref) v t = assert_total $ let x # t := read1 ref t in go x x t
-
-  where
-    go : ST1 s a -> ST1 s a -> F1' s
-    go x Ini1 t =
-      case caswrite1 ref x (Val1 v) t of
-        True # t => () # t
-        _    # t => putOnce1 (O ref) v t
-    go x (Val1 _)  t = () # t
-    go x (Obs1 cb) t =
-      case caswrite1 ref x (Val1 v) t of
-        True # t => cb v t
-        _    # t => putOnce1 (O ref) v t
+putOnce1 o v t = let _ # t := completeOnce1 o v t in () # t
 
 unobs : Once s a -> F1' s
 unobs (O ref) t =
@@ -88,7 +107,7 @@ unobs (O ref) t =
   where
     go : ST1 s a -> ST1 s a -> F1' s
     go x (Obs1 cb) t =
-      case caswrite1 ref x Ini1 t of
+      case caswrite1 ref x Cnl1 t of
         True # t => () # t
         _    # t => unobs (O ref) t
     go x _ t = () # t
@@ -100,6 +119,9 @@ unobs (O ref) t =
 |||
 ||| The action that is returned by this function can be used to
 ||| unregister the observer.
+|||
+||| Unregistering the observer will complete the `Once` so that
+||| no longer a value can be set.
 |||
 ||| Note: `Once` values can only be observed
 |||       by one observer. Use `Deferred` in case you need to install
@@ -242,6 +264,10 @@ export %inline
 completedOnce : Lift1 s f => Once s a -> f Bool
 completedOnce d = lift1 $ completedOnce1 d
 
+||| Lifted version of `completeOnce1`
+export %inline
+completeOnce : Lift1 s f => Once s a -> (v : a) -> f Bool
+completeOnce o v = lift1 $ completeOnce1 o v
 
 ||| Lifted version of `putOnce1`
 export %inline
