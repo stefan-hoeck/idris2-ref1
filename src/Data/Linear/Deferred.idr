@@ -90,7 +90,10 @@ completeOnce1 (O ref) v t =
       case caswrite1 ref x (Val1 v) t of
         True # t => let _ # t := cb v t in True # t
         _    # t => completeOnce1 (O ref) v t
-    go x Cnl1 t = False # t
+    go x Cnl1 t =
+      case caswrite1 ref x (Val1 v) t of
+        True # t => False # t
+        _    # t => completeOnce1 (O ref) v t
 
 ||| Atomically tries to write the given value to a `Once`.
 |||
