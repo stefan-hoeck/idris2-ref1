@@ -157,6 +157,12 @@ LIO = Lift1 World
 -- Debugging
 --------------------------------------------------------------------------------
 
+public export
+data DebugFlag : Type where
+  [noHints]
+  NoDebugging : DebugFlag
+  Debugging   : DebugFlag
+
 ||| This is a utility for debugging complex linear algorithms
 ||| similar to but more convenient than the one find in module
 ||| `Debug.Trace`.
@@ -166,9 +172,9 @@ export %inline
 debug1 : String -> F1' s
 debug1 s t = let MkIORes u t := toPrim (putStrLn s) t in u # t
 
-||| Like `debug1` but can be conveniently turned on and off via a
-||| boolean flag.
+||| Like `debug1` but can be conveniently turned on and off via an
+||| auto-implicit flag.
 export %inline
-debugIf1 : {default False debug : Bool} -> String -> F1' s
-debugIf1 {debug = False} s t = () # t
-debugIf1 {debug = True}  s t = debug1 s t
+debugIf1 : {auto debug : DebugFlag} -> String -> F1' s
+debugIf1 {debug = NoDebugging} s t = () # t
+debugIf1 {debug = Debugging}   s t = debug1 s t
