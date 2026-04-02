@@ -152,3 +152,23 @@ IO1 = F1 World
 public export
 0 LIO : (f : Type -> Type) -> Type
 LIO = Lift1 World
+
+--------------------------------------------------------------------------------
+-- Debugging
+--------------------------------------------------------------------------------
+
+||| This is a utility for debugging complex linear algorithms
+||| similar to but more convenient than the one find in module
+||| `Debug.Trace`.
+|||
+||| Strictly speaking, using this breaks referential transparency.
+export %inline
+debug1 : String -> F1' s
+debug1 s t = let MkIORes u t := toPrim (putStrLn s) t in u # t
+
+||| Like `debug1` but can be conveniently turned on and off via a
+||| boolean flag.
+export %inline
+debugIf1 : {default False debug : Bool} -> String -> F1' s
+debugIf1 {debug = False} s t = () # t
+debugIf1 {debug = True}  s t = debug1 s t
