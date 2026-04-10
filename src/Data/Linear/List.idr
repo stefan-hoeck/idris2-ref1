@@ -28,6 +28,27 @@ find1 f = go
       let b # t := f x t
        in if b then Just x # t else go xs t
 
+||| Returns the longest (possibly empty) prefix of the given list
+||| for which the given predicate returns `True`.
+|||
+||| The second value of the pair returns the remainder of
+||| the list.
+export
+span1 : (a -> F1 s Bool) -> List a -> F1 s (List a, List a)
+span1 p = go [<]
+  where
+    go : SnocList a -> List a -> F1 s (List a, List a)
+    go sx []        t = (sx<>>[], []) # t
+    go sx (x :: xs) t =
+      let b # t := p x t
+       in if b then go (sx:<x) xs t else (sx<>>[],x::xs) # t
+
+||| Like `span1` but returns the longest prefix, for which the
+||| predicate does *not* hold.
+export %inline
+break1 : (a -> F1 s Bool) -> List a -> F1 s (List a, List a)
+break1 p = span1 $ \v,t => let b # t := p v t in not b # t
+
 ||| Partitions the values in a list according to the given
 ||| linear predicate.
 |||
