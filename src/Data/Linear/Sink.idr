@@ -62,6 +62,10 @@ sinkTo : HasIO io => (s : Sink a) -> a -> io ()
 sinkTo s = runIO . s.sink1
 
 export %inline
+refSink : Ref World t -> Sink t
+refSink r = S (write1 r)
+
+export %inline
 onceSink : Once World t -> Sink t
 onceSink o = S (putOnce1 o)
 
