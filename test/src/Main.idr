@@ -4,6 +4,7 @@ import Data.SortedSet
 import Data.Linear.Ref1
 import Data.Linear.Unique
 import Syntax.T1
+import Traverse1
 import Hedgehog
 
 %default total
@@ -106,4 +107,4 @@ props =
     ]
 
 main : IO ()
-main = test [props]
+main = test [Main.props, Traverse1.props]
