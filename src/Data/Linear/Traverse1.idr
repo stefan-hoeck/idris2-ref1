@@ -17,9 +17,18 @@ import public Data.Linear.Token
 public export
 interface Foldable1 (0 f : Type -> Type) where
   foldl1     : (a -> e -> F1 s a) -> a -> f e -> F1 s a
+
   foldr1     : (e -> a -> F1 s a) -> a -> f e -> F1 s a
+  foldr1 f r v t =
+   let fun # t := Traverse1.foldl1 (\g,el,t => (\x,t => let x2 # t := f el x t; in g x2 t) # t) Token.(#) v t
+    in fun r t
+
   foldMap1   : Monoid m => (a -> F1 s m) -> f a -> F1 s m
+  foldMap1 f v t =
+    foldl1 (\m1,el,t => let m2 # t := f el t in (m1<+>m2) # t) neutral v t
+
   traverse1_ : (a -> F1' s) -> f a -> F1' s
+  traverse1_ f v t = foldl1 (\_,el,t => f el t) () v t
 
 ||| Flipped version of `traverse1_`
 export %inline
