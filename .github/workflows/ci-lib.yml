@@ -33,6 +33,8 @@ jobs:
           apt-get install --yes nodejs
       - name: Build lib
         run: pack install ref1
+      - name: Build docs
+        run: pack typecheck ref1-docs
       - name: Test lib Chez
         run: pack test ref1
       - name: Test lib Node

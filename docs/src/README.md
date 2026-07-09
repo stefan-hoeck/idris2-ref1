@@ -1,1 +1,1 @@
-/home/hock/idris/ref1/README.md
+../../README.md
