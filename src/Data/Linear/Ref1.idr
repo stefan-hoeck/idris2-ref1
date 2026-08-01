@@ -247,3 +247,18 @@ Applicative Lzy where
 export %inline
 Monad Lzy where
   v >>= f = lazy (val $ f (val v))
+
+--------------------------------------------------------------------------------
+-- Fixed point computations
+--------------------------------------------------------------------------------
+
+||| This is unsafe and non-total and highly experimental.
+|||
+||| I'll try to eventually implement a safe version of this.
+export
+fix : (Lzy a -> a) -> a
+fix f =
+ let l           := fromST {a} (believe_me ())
+     res         := f l
+     MkIORes _ _ := prim__writeIORef l.mut (V res) %MkWorld
+  in res
