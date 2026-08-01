@@ -198,3 +198,52 @@ WithRef1 a b = forall s . (r : Ref s a) -> F1 s b
 export
 withRef1 : a -> WithRef1 a b -> b
 withRef1 v f = run1 $ \t => let r # t := ref1 v t in f r t
+
+--------------------------------------------------------------------------------
+-- Memoized Lazy Values
+--------------------------------------------------------------------------------
+
+data ST : Type -> Type where
+  V : a -> ST a
+  D : Lazy a -> ST a
+
+||| A delayed computation with memoization:
+|||
+||| The delayed computation will be run only once. After that, the result
+||| will be stored in and retrieved from a mutable reference.
+public export
+record Lzy a where
+  constructor L
+  mut : Mut (ST a)
+
+fromST : ST a -> Lzy a
+fromST st = let MkIORes m _ := prim__newIORef st %MkWorld in L m
+
+frce : a -> Mut (ST a) -> a
+frce v m = let MkIORes _ _ := prim__writeIORef m (V v) %MkWorld in v
+
+||| Wraps a delayed computation into a value of type `Lzy`.
+export %inline
+lazy : Lazy a -> Lzy a
+lazy v = fromST (D v)
+
+||| Forces a delayed computation, extracting its value.
+export %inline
+val : Lzy a -> a
+val (L m) =
+  case prim__readIORef m %MkWorld of
+    MkIORes (V v) _ => v
+    MkIORes (D v) w => frce v m
+
+export %inline
+Functor Lzy where
+  map f v = lazy (f $ val v)
+
+export %inline
+Applicative Lzy where
+  pure v  = fromST (V v)
+  f <*> v = lazy (val f $ val v)
+
+export %inline
+Monad Lzy where
+  v >>= f = lazy (val $ f (val v))
