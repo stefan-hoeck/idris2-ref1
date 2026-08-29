@@ -20,13 +20,32 @@ filter1 f = go [<]
 ||| linear predicate returns `True`.
 export
 find1 : (a -> F1 s Bool) -> List a -> F1 s (Maybe a)
-find1 f = go
-  where
-    go : List a -> F1 s (Maybe a)
-    go []        t = Nothing # t
-    go (x :: xs) t =
-      let b # t := f x t
-       in if b then Just x # t else go xs t
+find1 f []      t = Nothing # t
+find1 f (x::xs) t =
+ let b # t := f x t
+  in if b then Just x # t else find1 f xs t
+
+||| Returns `True` if the given list holds at least one value,
+||| for which the given linear predicate returns `True`
+|||
+||| Trivially, this returns `False` for the empty list.
+export
+any1 : (a -> F1 s Bool) -> List a -> F1 s Bool
+any1 f [] t = False # t
+any1 f (x::xs) t =
+ let b # t := f x t
+  in if b then True # t else any1 f xs t
+
+||| Returns `True` if the given list holds only values,
+||| for which the given linear predicate returns `True`
+|||
+||| Trivially, this returns `True` for the empty list.
+export
+all1 : (a -> F1 s Bool) -> List a -> F1 s Bool
+all1 f [] t = True # t
+all1 f (x::xs) t =
+ let b # t := f x t
+  in if b then all1 f xs t else False # t
 
 ||| Returns the longest (possibly empty) prefix of the given list
 ||| for which the given predicate returns `True`.
