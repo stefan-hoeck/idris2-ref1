@@ -112,7 +112,7 @@ maybeUnit1 True f t =
         | Nothing # t =>
             Nothing # t
     in Just () # t
-maybe1 False _ t = Nothing # t
+maybeUnit1 False _ t = Nothing # t
 
 ||| Run a stateful computation `n` times
 export
