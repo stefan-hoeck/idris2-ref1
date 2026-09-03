@@ -106,8 +106,8 @@ when1 False _ t = () # t
 
 ||| Run the given stateful computation that returns `Maybe ()`.
 export
-maybe1 : Bool -> Lazy (F1 s (Maybe ())) -> F1 s (Maybe ())
-maybe1 True f t =
+maybeUnit1 : Bool -> Lazy (F1 s (Maybe ())) -> F1 s (Maybe ())
+maybeUnit1 True f t =
   let Just () # t := f t
         | Nothing # t =>
             Nothing # t
