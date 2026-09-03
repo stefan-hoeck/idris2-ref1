@@ -104,6 +104,16 @@ when1 : Bool -> Lazy (F1' s) -> F1' s
 when1 True  f t = f t
 when1 False _ t = () # t
 
+||| Run the given stateful computation that returns `Maybe ()` if the boolean value is `True`.
+export
+maybe1 : Bool -> Lazy (F1 s (Maybe ())) -> F1 s (Maybe ())
+maybe1 True f t =
+  let Just () # t := f t
+        | Nothing # t =>
+            Nothing # t
+    in Just () # t
+maybe1 False _ t = Nothing # t
+
 ||| Run a stateful computation `n` times
 export
 forN : Nat -> F1' s -> F1' s
