@@ -104,7 +104,7 @@ when1 : Bool -> Lazy (F1' s) -> F1' s
 when1 True  f t = f t
 when1 False _ t = () # t
 
-||| Run the given stateful computation that returns `Maybe ()` if the boolean value is `True`.
+||| Run the given stateful computation that returns `Maybe ()`.
 export
 maybe1 : Bool -> Lazy (F1 s (Maybe ())) -> F1 s (Maybe ())
 maybe1 True f t =
