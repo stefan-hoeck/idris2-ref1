@@ -106,13 +106,11 @@ when1 False _ t = () # t
 
 ||| Run the given stateful computation if the boolean value is `True`.
 export
-maybeUnit1 : Bool -> Lazy (F1 s (Maybe ())) -> F1 s (Maybe ())
-maybeUnit1 True f t =
-  let Just () # t := f t
-        | Nothing # t =>
-            Nothing # t
-    in Just () # t
-maybeUnit1 False _ t = Nothing # t
+whenMaybe1 : Bool -> Lazy (F1 s (Maybe a)) -> F1 s (Maybe a)
+whenMaybe1 True f t =
+  let f' # t := f t
+   in (f' <|> f') # t
+whenMaybe1 False _ t = Nothing # t
 
 ||| Run a stateful computation `n` times
 export
