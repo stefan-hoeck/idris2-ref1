@@ -106,9 +106,9 @@ when1 False _ t = () # t
 
 ||| Run the given stateful computation if the boolean value is `True`.
 export
-whenAlt1 : Bool -> Lazy (F1 s (Maybe a)) -> F1 s (Maybe a)
+whenAlt1 : Alternative f => Bool -> Lazy (F1 s (f a)) -> F1 s (f a)
 whenAlt1 True  f t = f t
-whenAlt1 False _ t = Nothing # t
+whenAlt1 False _ t = empty # t
 
 ||| Run a stateful computation `n` times
 export
