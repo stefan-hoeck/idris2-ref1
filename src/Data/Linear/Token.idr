@@ -181,6 +181,6 @@ debug1 s t = let MkIORes u t := toPrim (putStrLn s) t in u # t
 ||| Like `debug1` but can be conveniently turned on and off via an
 ||| auto-implicit flag.
 export %inline
-debugIf1 : {auto debug : DebugFlag} -> String -> F1' s
+debugIf1 : {auto debug : DebugFlag} -> Lazy String -> F1' s
 debugIf1 {debug = NoDebugging} s t = () # t
 debugIf1 {debug = Debugging}   s t = debug1 s t
